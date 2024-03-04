@@ -110,12 +110,12 @@ org $008036
     jsl init_ram
 
 org $13E9C7
-    nop #3
+    jsr get_maverick_medal_toxic_seahorse_bank_13
 org $13E4D7
     jsr check_toxic_seahorse_bank_13
 
 org $39A14B
-    nop #3
+    jsr get_maverick_medal_blast_hornet_bank_39
 org $00BEB2
     jsr check_blast_hornet_bank_00
 org $07C479
@@ -124,7 +124,7 @@ org $399C85
     jsr check_blast_hornet_bank_39
 
 org $13F0BE
-    nop #3
+    jsr get_maverick_medal_volt_catfish_bank_13
 org $13EAAB
     jsr check_volt_catfish_bank_13
 org $04E097
@@ -137,29 +137,29 @@ org $00BEA7
     jsr check_volt_catfish_bank_00
 
 org $03D5B3
-    nop #3
+    jsr get_maverick_medal_crush_crawfish_bank_03
 org $03C5C4
     jsr check_crush_crawfish_bank_03
 
 org $13E3AA
-    nop #3
+    jsr get_maverick_medal_neon_tiger_bank_13
 org $13DCE6
     jsr check_neon_tiger_bank_13
 
 org $13F7C1
-    nop #3
+    jsr get_maverick_medal_gravity_beetle_bank_13
 org $13F27F
     jsr check_gravity_beetle_bank_13
 org $07B03B
     jsr check_gravity_beetle_bank_07
 
 org $03CD9C
-    nop #3
+    jsr get_maverick_medal_blizzard_buffalo_bank_03
 org $03C8A7
     jsr check_blizzard_buffalo_bank_03
 
 org $3FEB12
-    nop #3
+    jsr get_maverick_medal_tunnel_rhino_bank_3F
 org $3FE629
     jsr check_tunnel_rhino_bank_3F
 
@@ -292,7 +292,8 @@ org $00FD19
 
 
 org $00AABA
-    jsr write_boss_clear_bank_00
+    ;jsr write_boss_clear_bank_00
+    nop #3
 
 ; infinite hp
 org $008108
@@ -1151,14 +1152,13 @@ org $2FF000
         beq .already_full
         dec 
         sta !give_1up
-        lda #$09
-        cmp $1FB4
-        beq .already_full
+        lda $1FB4
+        cmp #$09
         bcs .already_full
     .give
+        inc $1FB4
         lda #$1A
         jsl $01802B
-        inc $1FB4
     .already_full
         rtl 
 
@@ -1239,6 +1239,9 @@ org $13FA6E
         bit.w !toxic_seahorse_clear
         plb 
         rts 
+    get_maverick_medal_toxic_seahorse_bank_13:
+        sta.l !toxic_seahorse_clear
+        rts
     check_volt_catfish_bank_13:
         phb 
         pea $7E7E
@@ -1246,6 +1249,9 @@ org $13FA6E
         plb 
         bit.w !volt_catfish_clear
         plb 
+        rts 
+    get_maverick_medal_volt_catfish_bank_13:
+        sta.l !volt_catfish_clear
         rts 
     check_neon_tiger_bank_13:
         phb 
@@ -1255,6 +1261,9 @@ org $13FA6E
         bit.w !neon_tiger_clear
         plb 
         rts 
+    get_maverick_medal_neon_tiger_bank_13:
+        sta.l !neon_tiger_clear
+        rts
     check_gravity_beetle_bank_13:
         phb 
         pea $7E7E
@@ -1262,6 +1271,9 @@ org $13FA6E
         plb 
         bit.w !gravity_beetle_clear
         plb 
+        rts 
+    get_maverick_medal_gravity_beetle_bank_13:
+        sta.l !gravity_beetle_clear
         rts 
     capsule_check_ride_chip:
         and.l !ride_chip_collected
@@ -1320,6 +1332,9 @@ org $03FF00
         bit.w !crush_crawfish_clear
         plb 
         rts 
+    get_maverick_medal_crush_crawfish_bank_03:
+        sta.l !crush_crawfish_clear
+        rts 
     check_blizzard_buffalo_bank_03:
         phb 
         pea $7E7E
@@ -1327,6 +1342,9 @@ org $03FF00
         plb 
         bit.w !blizzard_buffalo_clear
         plb 
+        rts 
+    get_maverick_medal_blizzard_buffalo_bank_03:
+        sta.l !blizzard_buffalo_clear
         rts 
     ride_chip_write_bank_03:
         phb 
@@ -1436,9 +1454,15 @@ org $3FF4BE
         bit.w !tunnel_rhino_clear
         plb 
         rts 
+    get_maverick_medal_tunnel_rhino_bank_3F:
+        sta.l !tunnel_rhino_clear
+        rts 
 
 
 org $39FFE6
+    get_maverick_medal_blast_hornet_bank_39:
+        sta.l !blast_hornet_clear
+        rts 
     check_blast_hornet_bank_39:
         phb 
         pea $7E7E
