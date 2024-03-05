@@ -30,14 +30,14 @@ lorom
 
 !unlocked_doppler_lab = !unlocked_levels_array+$0E
 
-!blast_hornet_clear = !levels_completed_array+$00
-!blizzard_buffalo_clear = !levels_completed_array+$02
-!gravity_beetle_clear = !levels_completed_array+$04
-!toxic_seahorse_clear = !levels_completed_array+$06
-!volt_catfish_clear = !levels_completed_array+$08
-!crush_crawfish_clear = !levels_completed_array+$0A
-!tunnel_rhino_clear = !levels_completed_array+$0C
-!neon_tiger_clear = !levels_completed_array+$0E
+!blast_hornet_clear = !levels_completed_array+$02
+!blizzard_buffalo_clear = !levels_completed_array+$0C
+!gravity_beetle_clear = !levels_completed_array+$0A
+!toxic_seahorse_clear = !levels_completed_array+$00
+!volt_catfish_clear = !levels_completed_array+$04
+!crush_crawfish_clear = !levels_completed_array+$06
+!tunnel_rhino_clear = !levels_completed_array+$0E
+!neon_tiger_clear = !levels_completed_array+$08
 
 !sub_tank_array = $1FB7
 
@@ -55,6 +55,7 @@ doppler_heart_tank_count = $2FFFF4
 doppler_sub_tank_count = $2FFFF5
 pickupsanity_configuration = $2FFFF7
 starting_life_count = $2FFFF6
+debug_infinite_hp = $2FFFFF
 
 org $3CCE4B
     sprite_data_pointers:
@@ -77,7 +78,9 @@ org $3CCE4B
 
 ; skips over Gold Armor checks
 org $13C016
-    BRA $19
+    bra +
+org $13C031
+    +   
 
 ; remap ram for capsules
 org $13C03E
@@ -174,9 +177,9 @@ org $07E652
     jsr check_vile_boss_count_bank_07
 
     ;# Allow exiting a level at any time
-;org $00CF0C
-;   lda $1FBC,x
-;   nop 
+org $00CF0C
+   lda #$40
+   nop
 
 
 org $01E84A
@@ -784,12 +787,14 @@ org $2FF000
 
 
         .infinite_hp
+            lda.l debug_infinite_hp
+            beq ..nope 
             lda $09FF
-            cmp #$05
-            bcS +
+            cmp #$07
+            bcs ..nope
             lda $1FD2
             sta $09FF
-        +   
+        ..nope
 
         .return_to_loop
             inc $09CB
