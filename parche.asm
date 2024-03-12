@@ -28,6 +28,8 @@ lorom
 !level_index = $1FAE
 !weapon_array = $1FBC
 
+!active_character = $0A8E
+
 !unlocked_doppler_lab = !unlocked_levels_array+$0E
 
 !blast_hornet_clear = !levels_completed_array+$02
@@ -88,10 +90,12 @@ org $13C03E
 org $13C045
 ;    jsr capsule_check_ride_chip
     and.l !ride_chip_collected
-    bne $23
-    bra +
+    bne +
+    bra ++
+org $13C06D
++
 org $13C071
-+   
+++   
 ;org $13C051
 ;    jsr capsule_check_upgrades
 ;org $13C056
@@ -141,7 +145,7 @@ org $00BEA7
 
 org $03D5B3
     jsr get_maverick_medal_crush_crawfish_bank_03
-org $03C5C4
+org $03D088
     jsr check_crush_crawfish_bank_03
 
 org $13E3AA
@@ -167,13 +171,13 @@ org $3FE629
     jsr check_tunnel_rhino_bank_3F
 
     ;# checks before
-org $01CDD0
+org $01CDD0  ; 01CDAD
     jsr check_vile_boss_count_bank_01
     ;# Checks during the level itself?
-org $01F0EA
+org $01F0EA ; 01EBD4
     jsr check_vile_boss_count_bank_01
     ;# Checks during the boss itself?
-org $07E652
+org $07E652 ; 07E49F
     jsr check_vile_boss_count_bank_07
 
     ;# Allow exiting a level at any time
@@ -676,7 +680,7 @@ org $2FF000
     .nope
         plp 
         rtl 
-
+        
     listener_worm_seeker_r:
         jsl $399225
         php 
@@ -1479,7 +1483,7 @@ org $39FFE6
 
 org $02FF73
     ride_chip_check_bank_02:
-        and !ride_chip
+        and.l !ride_chip
         rts 
     check_volt_catfish_bank_02:
         phb 
