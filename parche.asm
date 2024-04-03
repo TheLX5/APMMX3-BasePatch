@@ -10,6 +10,10 @@ lorom
 !upgrades_collected         = $7EF463
 !ride_chip_collected        = $7EF464
 !sub_tank_collected_array   = $7EF465
+!vile_access                = $7EF466
+!energy_link_send_packet    = $7EF467
+!play_sfx_flag              = $7EF469
+!play_sfx_num               = $7EF46A
 
 !pickup_array               = $7EF480
 
@@ -22,6 +26,8 @@ lorom
 !hp_refill_timer = $7EF4E6
 
 !give_1up = $7EF4E7
+
+!giving_item = $7EF4FF
 
 !check = $7EF43D
 
@@ -49,15 +55,87 @@ lorom
 
 !upgrades = $1FD1
 
-doppler_configuration = $2FFFF0
-doppler_medal_count = $2FFFF1
-doppler_weapon_count = $2FFFF2
-doppler_armor_count = $2FFFF3
-doppler_heart_tank_count = $2FFFF4
-doppler_sub_tank_count = $2FFFF5
-pickupsanity_configuration = $2FFFF7
-starting_life_count = $2FFFF6
+!x_speed = $09F2
+!y_speed = $09F4
+
+doppler_configuration = $2FFFE0
+doppler_medal_count = $2FFFE1
+doppler_weapon_count = $2FFFE2
+doppler_armor_count = $2FFFE3
+doppler_heart_tank_count = $2FFFE4
+doppler_sub_tank_count = $2FFFE5
+pickupsanity_configuration = $2FFFE7
+starting_life_count = $2FFFE6
+vile_configuration = $2FFFE8
+vile_medal_count = $2FFFE9
+vile_weapon_count = $2FFFEA
+vile_armor_count = $2FFFEB
+vile_heart_tank_count = $2FFFEC
+vile_sub_tank_count = $2FFFED
+logic_boss_weakness = $2FFFEE
+logic_vile_required = $2FFFEF
+logic_z_saber = $2FFFF0
+doppler_lab_1_boss = $2FFFF1
+doppler_lab_2_boss = $2FFFF2
+doppler_lab_3_boss_rematch_count = $2FFFF3
+bit_medal_count = $2FFFF4
+byte_medal_count = $2FFFF5
+disable_charge_freeze = $2FFFF6
+energy_link = $2FFFF7
 debug_infinite_hp = $2FFFFF
+
+org doppler_configuration
+    db $00
+
+org doppler_medal_count
+    db $08
+
+org doppler_weapon_count
+    db $08
+org doppler_armor_count
+    db $08
+org doppler_heart_tank_count
+    db $08
+org doppler_sub_tank_count
+    db $04
+org pickupsanity_configuration
+    db $01
+org starting_life_count
+    db $03
+org vile_configuration
+    db $00
+org vile_medal_count
+    db $08
+org vile_weapon_count
+    db $08
+org vile_armor_count
+    db $08
+org vile_heart_tank_count
+    db $08
+org vile_sub_tank_count
+    db $04
+org logic_boss_weakness
+    db $01
+org logic_vile_required
+    db $01
+org logic_z_saber
+    db $01
+org doppler_lab_1_boss
+    db $01
+org doppler_lab_2_boss
+    db $01
+org doppler_lab_3_boss_rematch_count
+    db $02
+org bit_medal_count
+    db $02
+org byte_medal_count
+    db $05
+org disable_charge_freeze
+    db $01
+org energy_link
+    db $01
+org debug_infinite_hp
+    db $00
 
 org $3CCE4B
     sprite_data_pointers:
@@ -77,6 +155,18 @@ org $3CCE4B
         dw $FAEC    ; 0D - Doppler Stage 4
         dw $FBD2    ; 0E - Destroyed Doppler Stage 2
         dw $FE7E    ; 0F - Maverick Intro
+
+; Disable capsules giving out items and cosmetic changes
+org $05C7C7
+    dw $C81B  ;$C7D9    ; helmet upgrade
+    dw $C81B  ;$C7E0    ; arm upgrade
+    dw $C81B  ;$C7F3    ; body upgrade
+    dw $C81B  ;$C808    ; leg upgrade
+    dw $C82E  ;$C82E    ; helmet chip
+    dw $C82E  ;$C824    ; arm chip
+    dw $C82E  ;$C82E    ; body chip
+    dw $C82E  ;$C82E    ; leg chip
+    dw $C82E  ;$C824    ; gold armor
 
 ; skips over Gold Armor checks
 org $13C016
@@ -171,17 +261,47 @@ org $3FE629
     jsr check_tunnel_rhino_bank_3F
 
     ;# checks before
-org $01CDD0  ; 01CDAD
-    jsr check_vile_boss_count_bank_01
+;#org $01CDD0  ; 01CDAD
+;#    jsr check_vile_boss_count_bank_01
     ;# Checks during the level itself?
-org $01F0EA ; 01EBD4
-    jsr check_vile_boss_count_bank_01
+;#org $01F0EA ; 01EBD4
+;#    jsr check_vile_boss_count_bank_01
     ;# Checks during the boss itself?
-org $07E652 ; 07E49F
-    jsr check_vile_boss_count_bank_07
+;#org $07E652 ; 07E49F
+;#    jsr check_vile_boss_count_bank_07
+
+;# Rewrite Vile access logic
+org $01CDAD
+    vile_access_1:
+        lda !vile_access
+        bmi code_01CDC2
+        jmp $CDDB
+org $01CDC2
+    code_01CDC2:
+
+org $01EBD4
+    vile_access_2:
+        lda !vile_access
+        bmi code_01EBE6
+        jmp $EBEA
+org $01EBE6
+    code_01EBE6:
+
+org $07E49F
+    vile_access_3:
+        lda !vile_access
+        bmi code_07E4F7
+        jmp $E4B1
+org $07E4F7
+    code_07E4F7:
+
+
 
     ;# Allow exiting a level at any time
+org $00CEF9
+    nop #4
 org $00CF0C
++
    lda #$40
    nop
 
@@ -236,6 +356,19 @@ org $01FF84
     sub_tank_write_bank_01:
         sta.l !sub_tank_collected_array,x
         rts 
+
+org $3CC491
+    jsl bit_byte_level_completed
+org $078F85
+    jsl bit_byte_level_completed
+org $3CC497
+    jsl bit_byte_medal_count
+org $078F8B
+    jsl bit_byte_medal_count
+org $078F8F
+    jml bit_medal_constraints
+org $3CC49B
+    jml byte_medal_contraints
 
 
 org $01DC33
@@ -296,6 +429,8 @@ org $00FD19
 
     warnpc $00FEF0
 
+org $00C4E9
+    jml lab_2_stage_special_case
 
 
 org $00AABA
@@ -317,8 +452,6 @@ org $038063
         rtl 
     warnpc $038078
         
-
-org $00C2CC
     
 org $00c44a
     jsl boss_locking
@@ -337,8 +470,11 @@ org $2FF000
         sep #$30
         lda #$FF
         sta !doppler_access
+        sta !vile_access
         lda #$06
         rtl 
+
+;########################################################################################
 
     boss_locking:
         jsl $038000
@@ -383,22 +519,125 @@ org $2FF000
         ply
         rts 
 
+;########################################################################################
+
+lab_2_stage_special_case:
+    lda.l doppler_lab_2_boss
+    beq .return
+    lda #$0E
+    sta $1FAE
+.return
+    jml $00C4F5
+
+;########################################################################################
+
+bit_byte_level_completed:
+        ldx !level_index
+        lda.l !levels_completed_array,x
+        bvc .nope
+        sec  
+        rtl
+    .nope
+        clc 
+        rtl 
+
+bit_byte_medal_count:
+        phb 
+        pea $7E7E
+        plb 
+        plb 
+        lda #$00
+        ldx #$0E
+    .loop
+        bit.w !levels_completed_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl .loop
+        plb 
+        rtl 
+
+bit_medal_constraints:
+        pha 
+        lda.l byte_medal_count
+        dec 
+        pha 
+        lda $02,s
+        cmp $01,s
+        beq .force
+        cmp.l byte_medal_count
+        bpl .ignore
+        cmp.l bit_medal_count
+        bmi .ignore
+    .check
+        pla 
+        pla 
+        jml $078F9B
+    .ignore
+        pla 
+        pla 
+        jml $078FB4
+    .force
+        pla 
+        pla 
+        jml $078FAD
+
+byte_medal_contraints:
+        cmp #$07
+        beq .force
+        cmp.l byte_medal_count
+        bmi .ignore
+        jml $3CC4A3
+    .ignore
+        jml $3CC4BE
+    .force
+        jml $3CC4B7
+
+;########################################################################################
+
     pickupsanity:
     .hp
         jsr .handle
+        jsr .add_el_packet
         lda $09FF
         and #$7F
         rtl 
     .weapon
         jsr .handle
+        jsr .add_el_packet
         lda $09FF
         and #$7F
         rtl 
     .1up
+        rep #$20
+        lda !energy_link_send_packet
+        clc 
+        adc #$00C0
+        sta !energy_link_send_packet
+        sep #$20
         jsr .handle
         lda #$09
         cmp $1FB4
         rtl 
+    
+    .add_el_packet
+        rep #$20
+        lda $0B
+        and #$007F
+        bne ..small
+    ..large
+        lda !energy_link_send_packet
+        clc 
+        adc #$0020
+        bra ..end
+    ..small
+        lda !energy_link_send_packet
+        clc 
+        adc #$0008
+    ..end
+        sta !energy_link_send_packet
+        sep #$20
+        rts 
 
     .handle
         lda $7E00D0
@@ -558,6 +797,8 @@ org $2FF000
         dw .doppler_2_destroyed
         dw .maverick_intro
 
+;########################################################################################
+
     listener_blizzard_buffalo:
         jsl $03C861
         php 
@@ -658,8 +899,13 @@ org $2FF000
         jsl $13C5FD
         php 
         sep #$30
+        lda $0B
+        beq .nope
         ldx #$0E
         jmp generic_listener
+    .nope
+        plp 
+        rtl 
 
     listener_mosquitus:
         jsl $0891F2
@@ -672,8 +918,10 @@ org $2FF000
         jsl $05A2D2
         php 
         sep #$30
+        lda $0B
+        beq .nope
         lda !level_index
-        cmp #$0B
+        cmp #$0E
         bne .nope
         ldx #$10        ; regular
         jmp generic_listener
@@ -706,15 +954,25 @@ org $2FF000
         jsl $3CB5FD
         php 
         sep #$30
+        lda $0B
+        beq .nope 
         ldx #$10
         jmp generic_listener
+    .nope
+        plp
+        rtl 
 
     listener_godkarmachine:
         jsl $32F2E9
         php 
         sep #$30
+        lda $0B
+        beq .nope
         ldx #$0E
         jmp generic_listener
+    .nope
+        plp 
+        rtl 
 
     listener_hell_crusher:
         jsl $3CA000
@@ -748,6 +1006,8 @@ org $2FF000
         jsl $08B7B1
         php 
         sep #$30
+        lda $0B
+        beq generic_listener_nope
         ldx #$01
     generic_listener:
         lda $01
@@ -759,93 +1019,152 @@ org $2FF000
         plp 
         rtl
 
-    main_loop:
-        .unlock_doppler
-            lda $7E00D0
-            cmp #$02
-            bcc .reset
-            phb 
-            pea $7E7E
-            plb 
-            plb 
-            lda.l doppler_configuration
-            asl 
-            tax 
-            jsr (.ptrs,x)
-            plb 
-            bra +
-        .reset
-            lda #$00
-            sta !item_index
+;########################################################################################
 
-        +
+main_loop:
+        lda $00D0
+        beq .reset
+        cmp #$02
+        bne .return
+    .playable
+        ldx $00D1
+        cpx #$08
+        bcs .return
+        jsr (.game_ptrs,x)
+    .return
+        inc $09CB
+        ldx #$00
+        rtl
+    .reset 
+        lda #$00
+        sta !item_index
+        bra .return
 
-        .increment_hp
-            lda $7E00D0
-            cmp #$02
-            bcc ..skip
-            jsl handle_heart_tank_upgrade
-            jsl handle_hp_refill
-            jsl give_1up
-        ..skip
+    .game_ptrs
+        dw map
+        dw level_intro
+        dw level
+        dw credits
 
+;##########################################################
 
-        .infinite_hp
-            lda.l debug_infinite_hp
-            beq ..nope 
-            lda $09FF
-            cmp #$07
-            bcs ..nope
-            lda $1FD2
-            sta $09FF
-        ..nope
-
-        .return_to_loop
-            inc $09CB
-            ldx #$00
-            rtl 
-
-    .ptrs
-        dw .multiworld
-        dw .require_medals
-        dw .require_weapons
-        dw .require_armor_upgrades
-        dw .require_heart_tanks
-        dw .require_sub_tanks
-
-    .multiworld
+level_intro:
+credits:
+return:
         rts
-    .require_medals
+
+;##########################################################
+
+map:
+        jsr playback_sfx
+        rts
+
+;##########################################################
+
+level:
+        jsr unlock_doppler_vile
+        jsr boss_rematch
+        jsr handle_heart_tank_upgrade
+        jsr handle_hp_refill
+        jsr give_1up
+        jsr playback_sfx
+        jsr infinite_hp
+        rts 
+
+;##########################################################
+
+playback_sfx:
+        lda !play_sfx_flag
+        beq .return
+        lda !play_sfx_num
+        jsl $01802B
+        lda #$00
+        sta !play_sfx_flag
+    .return
+        rts
+
+;##########################################################
+
+boss_rematch:
+        lda.l doppler_lab_3_boss_rematch_count
+        bne .return
+        lda #$FF
+        sta $1FDA
+    .return 
+        rts
+
+;##########################################################
+
+infinite_hp:
+        lda.l debug_infinite_hp
+        beq .nope 
+        lda $09FF
+        cmp #$07
+        bcs .nope
+        lda $1FD2
+        sta $09FF
+    .nope
+        rts
+
+;##########################################################
+
+unlock_doppler_vile:
+        phb 
+        pea $7E7E
+        plb 
+        plb 
+        lda.l doppler_configuration
+        asl 
+        tax 
+        jsr (.doppler_ptrs,x)
+        lda.l vile_configuration
+        asl 
+        tax 
+        jsr (.vile_ptrs,x)
+        plb 
+        rts 
+
+    .doppler_ptrs
+        dw ..multiworld
+        dw ..require_medals
+        dw ..require_weapons
+        dw ..require_armor_upgrades
+        dw ..require_heart_tanks
+        dw ..require_sub_tanks
+
+    ..multiworld
+        rts
+    ..require_medals
         lda #$00
         ldx #$0E
-    ..loop
+    ...loop
         bit.w !levels_completed_array,x
         bvc $01
         inc 
         dex #2
-        bpl ..loop
+        bpl ...loop
         cmp.l doppler_medal_count
-        bcs ..enable
-        jmp .disable
-    ..enable 
-        jmp .enable
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
 
-    .require_weapons
+    ..require_weapons
         lda #$00
         ldx #$0E
-    ..loop
+    ...loop
         bit.w !weapon_array,x
         bvc $01
         inc 
         dex #2
-        bpl ..loop
+        bpl ...loop
         cmp.l doppler_weapon_count
-        bcs ..enable
-        jmp .disable
-    ..enable 
-        jmp .enable
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
 
-    .require_armor_upgrades
+    ..require_armor_upgrades
         lda !ride_chip
         and #$F0
         pha 
@@ -855,64 +1174,64 @@ org $2FF000
         sta $01,s
         ldy #$00
         ldx #$07
-    ..loop
+    ...loop
         lda $01,s
         and.l .bit_check,x
         beq $01
         iny 
         dex 
-        bpl ..loop
+        bpl ...loop
         pla 
         tya 
         cmp.l doppler_armor_count
-        bcs ..enable
-        jmp .disable
-    ..enable 
-        jmp .enable
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
 
-    .require_heart_tanks
+    ..require_heart_tanks
         ldy #$00
         ldx #$07
-    ..loop
+    ...loop
         lda.w !heart_tanks
         and.l .bit_check,x
         beq $01
         iny 
         dex 
-        bpl ..loop
+        bpl ...loop
         tya 
         cmp.l doppler_heart_tank_count
-        bcs ..enable
-        jmp .disable
-    ..enable 
-        jmp .enable
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
 
-    .require_sub_tanks
+    ..require_sub_tanks
         lda !upgrades
         and #$F0
         pha 
         ldy #$00
         ldx #$07
-    ..loop
+    ...loop
         lda $01,s
         and.l .bit_check,x
         beq $01
         iny 
         dex 
-        bpl ..loop
+        bpl ...loop
         pla 
         tya 
         cmp.l doppler_sub_tank_count
-        bcs ..enable
-        jmp .disable
-    ..enable 
-        jmp .enable
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
 
-    .disable 
+    ..disable 
         lda #$FF
         sta !doppler_access
         rts 
-    .enable
+    ..enable
         lda #$00
         sta !doppler_access
         lda #$01
@@ -922,7 +1241,123 @@ org $2FF000
     .bit_check
         db $01,$02,$04,$08,$10,$20,$40,$80
 
-    handle_heart_tank_upgrade:
+;##########################################################
+
+    .vile_ptrs
+        dw ..multiworld
+        dw ..require_medals
+        dw ..require_weapons
+        dw ..require_armor_upgrades
+        dw ..require_heart_tanks
+        dw ..require_sub_tanks
+
+    ..multiworld
+        rts
+    ..require_medals
+        lda #$00
+        ldx #$0E
+    ...loop
+        bit.w !levels_completed_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl ...loop
+        cmp.l vile_medal_count
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
+
+    ..require_weapons
+        lda #$00
+        ldx #$0E
+    ...loop
+        bit.w !weapon_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl ...loop
+        cmp.l vile_weapon_count
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
+
+    ..require_armor_upgrades
+        lda !ride_chip
+        and #$F0
+        pha 
+        lda !upgrades
+        and #$0F
+        ora $01,s
+        sta $01,s
+        ldy #$00
+        ldx #$07
+    ...loop
+        lda $01,s
+        and.l .bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ...loop
+        pla 
+        tya 
+        cmp.l vile_armor_count
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
+
+    ..require_heart_tanks
+        ldy #$00
+        ldx #$07
+    ...loop
+        lda.w !heart_tanks
+        and.l .bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ...loop
+        tya 
+        cmp.l vile_heart_tank_count
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
+
+    ..require_sub_tanks
+        lda !upgrades
+        and #$F0
+        pha 
+        ldy #$00
+        ldx #$07
+    ...loop
+        lda $01,s
+        and.l .bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ...loop
+        pla 
+        tya 
+        cmp.l vile_sub_tank_count
+        bcs ...enable
+        jmp ..disable
+    ...enable 
+        jmp ..enable
+
+    ..disable 
+        lda #$FF
+        sta !vile_access
+        rts 
+    ..enable
+        lda #$00
+        sta !vile_access
+        rts
+
+;##########################################################
+
+handle_heart_tank_upgrade:
         lda !hp_tank_state
         tax 
         jmp (.ptrs,x)
@@ -934,14 +1369,14 @@ org $2FF000
         dw .end
 
     .waiting
-        rtl 
+        rts
     .init
         lda $1FD2
         cmp #$20
         bcc ..continue
         lda #$00
         sta !hp_tank_state
-        rtl
+        rts
     ..continue
         lda #$04
         sta !hp_tank_state
@@ -958,7 +1393,8 @@ org $2FF000
         sta $09E6
         jsl $04D0E8
         lda #$19
-        jml $01802B     ; sfx
+        jsl $01802B     ; sfx
+        rts 
     
     .wait_for_anim
         lda !hp_tank_timer
@@ -971,7 +1407,7 @@ org $2FF000
         sta !hp_tank_counter
         sta !hp_tank_timer_2
     ..not_yet
-        rtl 
+        rts
 
     .increment_hp
         lda $09FF
@@ -1004,7 +1440,8 @@ org $2FF000
         lda #$08
         sta !hp_tank_state
     ..not_done_inc
-        jml $01EA24
+        jsl $01EA24
+        rts 
     .end
         stz $1F25
         stz $1F26
@@ -1015,10 +1452,14 @@ org $2FF000
         stz $1F2B
         lda #$00
         sta !hp_tank_state
+        sta !giving_item
         jsl $04D130
-        jml $01EA35
+        jsl $01EA35
+        rts 
 
-    handle_hp_refill:
+;##########################################################
+
+handle_hp_refill:
         lda !hp_refill_state
         tax 
         jmp (.ptrs,x)
@@ -1030,7 +1471,7 @@ org $2FF000
         dw .end_tank
 
     .waiting
-        rtl
+        rts
     .init
         lda $09FF
         and #$7F
@@ -1074,7 +1515,7 @@ org $2FF000
     ..done_filling
         lda #$00
         sta !hp_refill_state
-        rtl 
+        rts
     ..max_tank
         lda #$17
         jsl $01802B
@@ -1097,7 +1538,7 @@ org $2FF000
         lda #$7F
         sta $1F4F
         jsl $04D0E8
-        rtl 
+        rts
 
     .increment_hp
         lda $09FF
@@ -1130,7 +1571,7 @@ org $2FF000
         lda #$06
         sta !hp_refill_state
     ..not_done_inc
-        rtl 
+        rts
     .end
         stz $1F25
         stz $1F26
@@ -1141,8 +1582,9 @@ org $2FF000
         stz $1F2B
         lda #$00
         sta !hp_refill_state
+        sta !giving_item
         jsl $04D130
-        rtl 
+        rts
 
     .end_tank
         lda !hp_refill_timer
@@ -1154,13 +1596,17 @@ org $2FF000
         lda #$00
         sta !hp_refill_state
     ..not_yet
-        rtl 
+        rts
 
-    give_1up:
+;##########################################################
+
+give_1up:
         lda !give_1up
         beq .already_full
         dec 
         sta !give_1up
+        lda #$00
+        sta !giving_item
         lda $1FB4
         cmp #$09
         bcs .already_full
@@ -1169,11 +1615,13 @@ org $2FF000
         lda #$1A
         jsl $01802B
     .already_full
-        rtl 
+        rts
 
     print pc
 
-    warnpc $2FFFF0
+    warnpc $2FFFE0
+
+;########################################################################################
 
 org $008FFE
     load_to_map_from_title_screen:
@@ -1198,8 +1646,8 @@ org $00FCF1
     jsl listener_mac
 org $00FCEC
     jsl listener_vile
-org $00FCCE
-    jsl listener_mosquitus
+;org $00FCCE
+;    jsl listener_mosquitus
 org $00FCC9
     jsl listener_press_disposer
 org $00FCC4
@@ -1297,25 +1745,118 @@ org $13FA6E
 org $03D879
     jsl ride_armor_better_menu
 
+org $0385F2
+    jsr fix_map_heart_tank_indicators
+org $0385F9
+    jsr fix_map_heart_tank_indicators
+org $038600
+    jsr fix_map_heart_tank_indicators
+org $038607
+    jsr fix_map_heart_tank_indicators
+org $03860E
+    jsr fix_map_heart_tank_indicators
+org $038615
+    jsr fix_map_heart_tank_indicators
+org $03861C
+    jsr fix_map_heart_tank_indicators
+org $038623
+    jsr fix_map_heart_tank_indicators
 
-org $03FF00
+org $03864F
+    jsr fix_map_ride_chip_indicator
+org $038656
+    jsr fix_map_upgrade_sub_tank_indicator
+org $03865D
+    jsr fix_map_ride_chip_indicator
+org $038664
+    jsr fix_map_ride_chip_indicator
+org $03866B
+    jsr fix_map_upgrade_sub_tank_indicator
+org $038672
+    jsr fix_map_ride_chip_indicator
+org $038679
+    jsr fix_map_upgrade_sub_tank_indicator
+org $038680
+    jsr fix_map_upgrade_sub_tank_indicator
+
+org $0386AC
+    jsr fix_map_ride_chip_indicator
+org $0386B3
+    jsr fix_map_upgrade_sub_tank_indicator
+org $0386BA
+    jsr fix_map_ride_chip_indicator
+org $0386C1
+    jsr fix_map_ride_chip_indicator
+org $0386C8
+    jsr fix_map_upgrade_sub_tank_indicator
+org $0386CF
+    jsr fix_map_ride_chip_indicator
+org $0386D6
+    jsr fix_map_upgrade_sub_tank_indicator
+org $0386DD
+    jsr fix_map_upgrade_sub_tank_indicator
+
+org $049080
+    jsl fix_level_helmet_indicators
+    nop 
+
+org $03FC00
+    fix_map_heart_tank_indicators:
+        lda.l !heart_tanks_collected
+        rts 
+    fix_map_upgrade_sub_tank_indicator:
+        lda.l !upgrades_collected
+        rts 
+    fix_map_ride_chip_indicator:
+        lda.l !ride_chip_collected
+        rts 
+
+    fix_level_helmet_indicators:
+        rep #$20
+        lda $10
+        cmp.w #!heart_tanks
+        beq .heart_tank
+        cmp.w #!ride_chip
+        beq .ride_chip
+        cmp.w #!upgrades
+        bne .failsafe
+    .upgrades
+        sep #$20
+        lda.l !upgrades_collected
+        bra .return
+    .heart_tank
+        sep #$20
+        lda.l !heart_tanks_collected
+        bra .return
+    .ride_chip
+        sep #$20
+        lda.l !ride_chip_collected
+        bra .return
+    .failsafe
+        sep #$20
+        lda ($10)
+    .return
+        sep #$20
+        bit $000A
+        rtl 
+
     ride_armor_better_menu:
         sta $35
-        lda $1FD7
+        lda !ride_chip
         bit #$01
         beq +
         lda #$00
         sta $34
         rtl
     +   
-        lda $1FD7
+        lda !ride_chip
         bit #$02
         beq +
         lda #$01
         sta $34
         rtl
     +   
-        lda $1FD7
+        lda !ride_chip
         bit #$04
         beq +
         lda #$02
@@ -1410,6 +1951,13 @@ org $05FBF3
 ;org $04A5C7
 ;    jsr level_clear_store_ram
 
+org $04942C
+    jsr make_player_not_get_stuck_after_shooting_a_pink_or_red_charge
+    nop 
+
+org $0494A9
+    jsr make_player_not_get_stuck_after_shooting_a_pink_or_red_charge
+    nop 
 
 org $04FFA5
     check_volt_catfish_bank_04:
@@ -1425,6 +1973,18 @@ org $04FFA5
         rts 
     level_clear_store_ram:
         sta.l !levels_completed_array-$03,x
+        rts 
+    
+make_player_not_get_stuck_after_shooting_a_pink_or_red_charge:
+        lda.l disable_charge_freeze
+        beq .do_not_move
+        lda $0A11
+        and #$03
+        beq .do_not_move
+        jsr $8444
+    .do_not_move
+        lda $3B
+        bit #$80
         rts 
 
 
