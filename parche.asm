@@ -15,6 +15,10 @@ lorom
 !play_sfx_flag              = $7EF469
 !play_sfx_num               = $7EF46A
 
+!victory = $7EF46B
+!map_portraits_array        = $7EF500
+!map_portraits_flag         = $7EF500
+
 !pickup_array               = $7EF480
 
 !hp_tank_state = $7EF4E0
@@ -82,60 +86,9 @@ bit_medal_count = $2FFFF4
 byte_medal_count = $2FFFF5
 disable_charge_freeze = $2FFFF6
 energy_link = $2FFFF7
+death_link = $2FFFF8
 debug_infinite_hp = $2FFFFF
 
-org doppler_configuration
-    db $00
-
-org doppler_medal_count
-    db $08
-
-org doppler_weapon_count
-    db $08
-org doppler_armor_count
-    db $08
-org doppler_heart_tank_count
-    db $08
-org doppler_sub_tank_count
-    db $04
-org pickupsanity_configuration
-    db $01
-org starting_life_count
-    db $03
-org vile_configuration
-    db $00
-org vile_medal_count
-    db $08
-org vile_weapon_count
-    db $08
-org vile_armor_count
-    db $08
-org vile_heart_tank_count
-    db $08
-org vile_sub_tank_count
-    db $04
-org logic_boss_weakness
-    db $01
-org logic_vile_required
-    db $01
-org logic_z_saber
-    db $01
-org doppler_lab_1_boss
-    db $01
-org doppler_lab_2_boss
-    db $01
-org doppler_lab_3_boss_rematch_count
-    db $02
-org bit_medal_count
-    db $02
-org byte_medal_count
-    db $05
-org disable_charge_freeze
-    db $01
-org energy_link
-    db $01
-org debug_infinite_hp
-    db $00
 
 org $3CCE4B
     sprite_data_pointers:
@@ -274,8 +227,8 @@ org $3FE629
 org $01CDAD
     vile_access_1:
         lda !vile_access
-        bmi code_01CDC2
-        jmp $CDDB
+        bpl code_01CDC2
+        jmp $CDBF
 org $01CDC2
     code_01CDC2:
 
@@ -900,7 +853,7 @@ byte_medal_contraints:
         php 
         sep #$30
         lda $0B
-        beq .nope
+        bne .nope
         ldx #$0E
         jmp generic_listener
     .nope
@@ -955,7 +908,7 @@ byte_medal_contraints:
         php 
         sep #$30
         lda $0B
-        beq .nope 
+        bne .nope 
         ldx #$10
         jmp generic_listener
     .nope
@@ -967,7 +920,7 @@ byte_medal_contraints:
         php 
         sep #$30
         lda $0B
-        beq .nope
+        bne .nope
         ldx #$0E
         jmp generic_listener
     .nope
@@ -1048,16 +1001,414 @@ main_loop:
 
 ;##########################################################
 
-level_intro:
 credits:
-return:
+        lda !doppler_access
+        bne .not_yet
+        lda #$01
+        sta !victory
+    .not_yet
+        rts 
+
+;##########################################################
+
+level_intro:
         rts
 
 ;##########################################################
 
 map:
         jsr playback_sfx
-        rts
+        lda #$00
+        sta !giving_item
+
+        lda $1E59
+        cmp #$04
+        bne .return
+        lda $7E2027
+        cmp #$22
+        bne +
+    .return
+        rts 
+    +   
+        ; modify ram code to allow our data be there
+        lda #$22
+        sta $7E2027
+        lda.b #hack_portraits
+        sta $7E2028
+        lda.b #hack_portraits>>8
+        sta $7E2029
+        lda.b #hack_portraits>>16
+        sta $7E202A
+        lda #$EA
+        sta $7E202B
+        lda #$EA
+        sta $7E202C
+
+        ldx #$1F
+        lda #$FF
+    .loop
+        sta.l !map_portraits_array,x
+        dex 
+        bpl .loop
+        rts 
+
+
+hack_portraits:
+        lda $00D1
+        beq .safety
+    ;# restore
+        lda #$AD
+        sta $7E2027
+        lda #$CE
+        sta $7E2028
+        lda #$09
+        sta $7E2029
+        lda #$0D 
+        sta $7E202A
+        lda #$D0
+        sta $7E202B
+        lda #$09
+        sta $7E202C
+    
+        lda $09CE
+        ora $09D0
+        rtl 
+
+    .safety
+        php 
+        phb 
+        phk 
+        plb 
+        sep #$30
+        lda $09CB
+        and #$0F
+        asl 
+        tax 
+        lda.l .offsets,x
+        bne +
+        jmp ..skip
+    +   
+        lda !unlocked_levels_array,x
+        beq ..locked
+    ..unlocked
+        phx 
+        lda.l .completed_indexes,x
+        tax 
+        lda.l !levels_completed_array,x
+        plx 
+        ora !unlocked_levels_array,x
+        cmp !map_portraits_array,x
+        beq ..skip
+        sta !map_portraits_array,x
+        ldy #$80
+        sty $2115
+        cmp #$00
+        rep #$20
+        phx 
+        lda.l .completed_indexes,x
+        tax 
+        lda.l !levels_completed_array,x
+        plx 
+        and #$0040
+        bne ..beaten
+    ..pending
+        lda.l .portrait_ptrs,x
+        bra ..shared
+    ..beaten
+        lda.l .completed_portrait_ptrs,x
+        bra ..shared
+    ..locked
+        cmp !map_portraits_array,x
+        beq ..skip
+        sta !map_portraits_array,x
+        rep #$20
+        lda.w #.blank_portrait
+    ..shared 
+        pha 
+        phx
+        lda.l .offsets,x
+        pha 
+        sta $2116
+        ldx #$00
+        ldy #$00
+    ...loop
+        lda ($04,s),y
+        sta $2118
+        iny #2
+        inx 
+        cpx #$06
+        bne ...loop
+        cpy #$3B
+        bcs ...break
+        ldx #$00
+        lda $01,s
+        clc 
+        adc #$0020
+        sta $01,s
+        sta $2116
+        bra ...loop
+    ...break
+        pla 
+        plx 
+        pla 
+        sep #$20
+    ..skip
+        plb 
+        plp 
+        lda $09CE
+        ora $09D0
+        rtl 
+
+    .offsets
+        dw $5841    ;# Blast hornet
+        dw $5847    ;# Blizzard Buffalo
+        dw $FFFF    ;# Blank
+        dw $5853    ;# Gravity Beetle
+        dw $5859    ;# Toxic Seahorse
+        dw $5AA1    ;# Volt Catfish
+        dw $5AA7    ;# Crush Crawfish
+        dw $FFFF    ;# Blank
+        dw $5AB3    ;# Tunnel Rhino
+        dw $5AB9    ;# Neon Tiger
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+
+    .completed_indexes
+        dw $0002
+        dw $000C
+        dw $FFFF
+        dw $000A
+        dw $0000
+        dw $0004
+        dw $0006
+        dw $FFFF
+        dw $000E
+        dw $0008
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+
+    .portrait_ptrs
+        dw .blast_hornet_portrait
+        dw .blizzard_buffalo_portrait
+        dw $FFFF
+        dw .gravity_beetle_portrait
+        dw .toxic_seahorse_portrait
+        dw .volt_catfish_portrait
+        dw .crush_crawfish_portrait
+        dw $FFFF
+        dw .tunnel_rhino_portrait
+        dw .neon_tiger_portrait
+
+    .completed_portrait_ptrs
+        dw .blast_hornet_completed_portrait
+        dw .blizzard_buffalo_completed_portrait
+        dw $FFFF
+        dw .gravity_beetle_completed_portrait
+        dw .toxic_seahorse_completed_portrait
+        dw .volt_catfish_completed_portrait
+        dw .crush_crawfish_completed_portrait
+        dw $FFFF
+        dw .tunnel_rhino_completed_portrait
+        dw .neon_tiger_completed_portrait
+
+    .blank_portrait
+        ..row_1
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_2
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_3
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_4
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_5
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+
+    .blast_hornet_portrait
+        ..row_1
+            dw $1415,$1416,$1417,$1418,$1419,$141A
+        ..row_2
+            dw $1424,$1425,$1426,$1427,$1428,$1429
+        ..row_3
+            dw $1434,$1435,$1436,$1437,$1438,$1439
+        ..row_4
+            dw $1444,$1445,$1446,$1447,$1448,$1449
+        ..row_5
+            dw $1453,$1454,$1455,$1456,$1457,$1458
+    .blizzard_buffalo_portrait
+        ..row_1
+            dw $1C0F,$1C1B,$1C1C,$1C1D,$1C1E,$1C1F
+        ..row_2
+            dw $1C2A,$1C2B,$1C2C,$1C2D,$1C2E,$1C2F
+        ..row_3
+            dw $1C3A,$1C3B,$1C3C,$1C3D,$1C3E,$1C3F
+        ..row_4
+            dw $1C4A,$1C4B,$1C4C,$1C4D,$1C4E,$1C4F
+        ..row_5
+            dw $1C59,$1C5A,$1C5B,$1C5C,$1C5D,$1C5E
+    .gravity_beetle_portrait
+        ..row_1
+            dw $14E8,$14E9,$14EA,$14EB,$14EC,$14ED
+        ..row_2
+            dw $14F6,$14F7,$14F8,$14F9,$14FA,$14FB
+        ..row_3
+            dw $1504,$1505,$1506,$1507,$1508,$1509
+        ..row_4
+            dw $1512,$1513,$1514,$1515,$1516,$1517
+        ..row_5
+            dw $1521,$1522,$1523,$1524,$1525,$140F
+    .toxic_seahorse_portrait
+        ..row_1
+            dw $18EE,$18EF,$18F0,$18F1,$18F2,$18F3
+        ..row_2
+            dw $18FC,$18FD,$18FE,$18FF,$1900,$1901
+        ..row_3
+            dw $190A,$190B,$190C,$190D,$190E,$190F
+        ..row_4
+            dw $1918,$1919,$191A,$191B,$191C,$191D
+        ..row_5
+            dw $1926,$1927,$1928,$1929,$192A,$192B
+    .volt_catfish_portrait
+        ..row_1
+            dw $15E8,$15E9,$15EA,$15EB,$15EC,$15ED
+        ..row_2
+            dw $15F7,$15F8,$15F9,$15FA,$15FB,$15FC
+        ..row_3
+            dw $1606,$1607,$1608,$1609,$160A,$160B
+        ..row_4
+            dw $1615,$1616,$1617,$1618,$1619,$161A
+        ..row_5
+            dw $1624,$1625,$1626,$1627,$1628,$1629
+    .crush_crawfish_portrait
+        ..row_1
+            dw $1DEE,$1DEF,$1DF0,$1DF1,$1DF2,$1DF3
+        ..row_2
+            dw $1DFD,$1DFE,$1DFF,$1E00,$1E01,$1E02
+        ..row_3
+            dw $1E0C,$1E0D,$1E0E,$1E0F,$1E10,$1E11
+        ..row_4
+            dw $1E1B,$1E1C,$1E1D,$1E1E,$1E1F,$1E20
+        ..row_5
+            dw $1E2A,$1E2B,$1E2C,$1E2D,$1E2E,$1E2F
+    .tunnel_rhino_portrait
+        ..row_1
+            dw $1A9F,$1AA0,$1AA1,$1AA2,$1AA3,$1AA4
+        ..row_2
+            dw $1AAE,$1AAF,$1AB0,$1AB1,$1AB2,$1AB3
+        ..row_3
+            dw $1ABD,$1ABE,$1ABF,$1AC0,$1AC1,$1AC2
+        ..row_4
+            dw $1ACA,$1ACB,$1ACC,$1ACD,$1ACE,$1ACF
+        ..row_5
+            dw $1AD7,$1AD8,$1AD9,$1ADA,$1ADB,$1ADC
+    .neon_tiger_portrait
+        ..row_1
+            dw $1EA5,$1EA6,$1EA7,$1EA8,$1EA9,$1EAA
+        ..row_2
+            dw $1EB4,$1EB5,$1EB6,$1EB7,$1EB8,$1EB9
+        ..row_3
+            dw $1EC3,$1EC4,$1EC5,$1EC6,$1EC7,$1EC8
+        ..row_4
+            dw $1ED0,$1ED1,$1ED2,$1ED3,$1ED4,$1ED5
+        ..row_5
+            dw $1EDD,$1EDE,$1EDF,$1EE0,$1EE1,$1EE2
+
+    .blast_hornet_completed_portrait
+        ..row_1
+            dw $0415,$0416,$0417,$0418,$0419,$041A
+        ..row_2
+            dw $0424,$0425,$0426,$0427,$0428,$0429
+        ..row_3
+            dw $0434,$0435,$0436,$0437,$0438,$0439
+        ..row_4
+            dw $0444,$0445,$0446,$0447,$0448,$0449
+        ..row_5
+            dw $0453,$0454,$0455,$0456,$0457,$0458
+    .blizzard_buffalo_completed_portrait
+        ..row_1
+            dw $040F,$041B,$041C,$041D,$041E,$041F
+        ..row_2
+            dw $042A,$042B,$042C,$042D,$042E,$042F
+        ..row_3
+            dw $043A,$043B,$043C,$043D,$043E,$043F
+        ..row_4
+            dw $044A,$044B,$044C,$044D,$044E,$044F
+        ..row_5
+            dw $0459,$045A,$045B,$045C,$045D,$045E
+    .gravity_beetle_completed_portrait
+        ..row_1
+            dw $04E8,$04E9,$04EA,$04EB,$04EC,$04ED
+        ..row_2
+            dw $04F6,$04F7,$04F8,$04F9,$04FA,$04FB
+        ..row_3
+            dw $0504,$0505,$0506,$0507,$0508,$0509
+        ..row_4
+            dw $0512,$0513,$0514,$0515,$0516,$0517
+        ..row_5
+            dw $0521,$0522,$0523,$0524,$0525,$040F
+    .toxic_seahorse_completed_portrait
+        ..row_1
+            dw $04EE,$04EF,$04F0,$04F1,$04F2,$04F3
+        ..row_2
+            dw $04FC,$04FD,$04FE,$04FF,$0500,$0501
+        ..row_3
+            dw $050A,$050B,$050C,$050D,$050E,$050F
+        ..row_4
+            dw $0518,$0519,$051A,$051B,$051C,$051D
+        ..row_5
+            dw $0526,$0527,$0528,$0529,$052A,$052B
+    .volt_catfish_completed_portrait
+        ..row_1
+            dw $05E8,$05E9,$05EA,$05EB,$05EC,$05ED
+        ..row_2
+            dw $05F7,$05F8,$05F9,$05FA,$05FB,$05FC
+        ..row_3
+            dw $0606,$0607,$0608,$0609,$060A,$060B
+        ..row_4
+            dw $0615,$0616,$0617,$0618,$0619,$061A
+        ..row_5
+            dw $0624,$0625,$0626,$0627,$0628,$0629
+    .crush_crawfish_completed_portrait
+        ..row_1
+            dw $05EE,$05EF,$05F0,$05F1,$05F2,$05F3
+        ..row_2
+            dw $05FD,$05FE,$05FF,$0600,$0601,$0602
+        ..row_3
+            dw $060C,$060D,$060E,$060F,$0610,$0611
+        ..row_4
+            dw $061B,$061C,$061D,$061E,$061F,$0620
+        ..row_5
+            dw $062A,$062B,$062C,$062D,$062E,$062F
+    .tunnel_rhino_completed_portrait
+        ..row_1
+            dw $069F,$06A0,$06A1,$06A2,$06A3,$06A4
+        ..row_2
+            dw $06AE,$06AF,$06B0,$06B1,$06B2,$06B3
+        ..row_3
+            dw $06BD,$06BE,$06BF,$06C0,$06C1,$06C2
+        ..row_4
+            dw $06CA,$06CB,$06CC,$06CD,$06CE,$06CF
+        ..row_5
+            dw $06D7,$06D8,$06D9,$06DA,$06DB,$06DC
+    .neon_tiger_completed_portrait
+        ..row_1
+            dw $06A5,$06A6,$06A7,$06A8,$06A9,$06AA
+        ..row_2
+            dw $06B4,$06B5,$06B6,$06B7,$06B8,$06B9
+        ..row_3
+            dw $06C3,$06C4,$06C5,$06C6,$06C7,$06C8
+        ..row_4
+            dw $06D0,$06D1,$06D2,$06D3,$06D4,$06D5
+        ..row_5
+            dw $06DD,$06DE,$06DF,$06E0,$06E1,$06E2
+
 
 ;##########################################################
 
@@ -1067,9 +1418,22 @@ level:
         jsr handle_heart_tank_upgrade
         jsr handle_hp_refill
         jsr give_1up
+        jsr fix_softlock
         jsr playback_sfx
         jsr infinite_hp
         rts 
+
+;##########################################################
+
+fix_softlock:
+        lda !hp_tank_state
+        ora !hp_refill_state
+        ora !give_1up
+        bne .nope
+        lda #$00
+        sta !giving_item
+    .nope
+        rts
 
 ;##########################################################
 
@@ -2054,4 +2418,4 @@ org $02FF73
         plb 
         rts 
 
-
+incsrc "text.asm"
