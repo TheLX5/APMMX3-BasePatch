@@ -22,7 +22,7 @@ org $068F11
             db $34      ; YXPCCCTT
             dw $09CF    ; Tilemap destination
         .text
-            db "0.2.0"
+            db "1.1.0"
             
     made_by_string:
         .header

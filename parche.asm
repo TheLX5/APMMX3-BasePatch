@@ -14,12 +14,15 @@ lorom
 !energy_link_send_packet    = $7EF467
 !play_sfx_flag              = $7EF469
 !play_sfx_num               = $7EF46A
+!victory                    = $7EF46B
+!jammed_buster              = $7EF46C
 
-!victory = $7EF46B
 !map_portraits_array        = $7EF500
 !map_portraits_flag         = $7EF500
 
 !pickup_array               = $7EF480
+
+!on_ride_armor = $1F22
 
 !hp_tank_state = $7EF4E0
 !hp_tank_timer = $7EF4E1
@@ -28,6 +31,18 @@ lorom
 !hp_refill_state = $7EF4E4
 !hp_refill_amount = $7EF4E5
 !hp_refill_timer = $7EF4E6
+!weapon_refill_state = $7EF4E8
+!weapon_refill_amount = $7EF4E9
+!weapon_refill_timer = $7EF4EA
+!lab_backup = $7EF4EB
+!current_map_selection = $7EF4EC
+!current_checkpoint = $7EF4ED
+!bit_byte_selector = $7EF4EE
+!medal_count = $7EF4EF
+
+!weakness_table_ram = $7EF540
+!top_text_tilemap = $7EF380
+!bottom_text_tilemap = $7EF3C0
 
 !give_1up = $7EF4E7
 
@@ -50,6 +65,7 @@ lorom
 !crush_crawfish_clear = !levels_completed_array+$06
 !tunnel_rhino_clear = !levels_completed_array+$0E
 !neon_tiger_clear = !levels_completed_array+$08
+!intro_clear = !levels_completed_array+$1E
 
 !sub_tank_array = $1FB7
 
@@ -87,8 +103,11 @@ byte_medal_count = $2FFFF5
 disable_charge_freeze = $2FFFF6
 energy_link = $2FFFF7
 death_link = $2FFFF8
-debug_infinite_hp = $2FFFFF
-
+jammed_buster_configuration = $2FFFF9
+boss_weakness_rando = $2FFFFA
+starting_hp = $2FFFFC
+heart_tank_add = $2FFFFD
+doppler_all_labs = $2FFFFE
 
 org $3CCE4B
     sprite_data_pointers:
@@ -250,6 +269,8 @@ org $07E4F7
 
 
 
+
+
     ;# Allow exiting a level at any time
 org $00CEF9
     nop #4
@@ -309,6 +330,18 @@ org $01FF84
     sub_tank_write_bank_01:
         sta.l !sub_tank_collected_array,x
         rts 
+
+;# Press Disposer's door is always available alongside Godkarmachine's at Doppler 1
+org $3AFA69
+    nop #5
+org $3AFA55
+    jmp $FA62
+
+;# Bit & Byte always appear at Doppler 1
+org $078B00
+    nop #2
+org $078B0C
+    nop #2
 
 org $3CC491
     jsl bit_byte_level_completed
@@ -378,13 +411,36 @@ org $00FD19
         sta.l !levels_completed_array-$02,x
         rts 
 
+
+pushpc
+    org $00F215
+        lda.l starting_hp
+        jsr load_max_hp
+pullpc
     
+    load_max_hp:
+    .loop
+        cpy #$00
+        beq .break
+        clc 
+        adc.l heart_tank_add
+        dey
+        bra .loop
+    .break
+        cmp #$38
+        bcc +
+        lda #$38
+    +   
+        sta $1FD2
+        jmp $F21D
 
     warnpc $00FEF0
 
 org $00C4E9
     jml lab_2_stage_special_case
 
+org $058d9d
+    and #$7F
 
 org $00AABA
     ;jsr write_boss_clear_bank_00
@@ -424,12 +480,34 @@ org $2FF000
         lda #$FF
         sta !doppler_access
         sta !vile_access
+        
+        ldx #$00
+        rep #$20
+        lda #$207F
+    ..loop_text
+        sta !top_text_tilemap,x
+        sta !bottom_text_tilemap,x
+        inx #2
+        cpx #$40
+        bne ..loop_text
+        sep #$20
+
+        ldx #$00
+    .loop
+        lda.l weakness_table,x
+        sta !weakness_table_ram,x
+        inx 
+        cpx.b #23*8
+        bne .loop
+
         lda #$06
         rtl 
 
 ;########################################################################################
 
     boss_locking:
+        lda #$FF
+        sta !intro_clear
         jsl $038000
         beq .skip
         php 
@@ -452,6 +530,13 @@ org $2FF000
         pla 
         plp 
     .skip
+        php
+        pha 
+        lda $2A
+        jsr divide_by_9
+        jsl draw_stage_select
+        pla 
+        plp 
         rtl 
 
 
@@ -512,39 +597,66 @@ bit_byte_medal_count:
 
 bit_medal_constraints:
         pha 
-        lda.l byte_medal_count
-        dec 
-        pha 
-        lda $02,s
-        cmp $01,s
-        beq .force
-        cmp.l byte_medal_count
-        bpl .ignore
+        lda $1FD8
+        and #$03
+        bne .ignore
+        lda !bit_byte_selector
+        and #$01
+        bne .ignore
+        lda $01,s
         cmp.l bit_medal_count
         bmi .ignore
+        bra .force
     .check
-        pla 
         pla 
         jml $078F9B
     .ignore
         pla 
-        pla 
         jml $078FB4
     .force
-        pla 
         pla 
         jml $078FAD
 
 byte_medal_contraints:
+        pha 
+        lda $1FD8
+        and #$03
+        beq .ignore_pre
+        lda !bit_byte_selector
+        and #$01
+        bne .ignore_pre
+        pla 
         cmp #$07
         beq .force
         cmp.l byte_medal_count
         bmi .ignore
+        bra .force
         jml $3CC4A3
+    .ignore_pre
+        pla 
     .ignore
         jml $3CC4BE
     .force
         jml $3CC4B7
+
+;########################################################################################
+
+pushpc
+    org $04ABD6
+        jml jammed_buster
+pullpc
+
+jammed_buster:
+        lda.l jammed_buster_configuration
+        beq .normal
+        lda !jammed_buster
+        beq .jammed
+    .normal
+        lda $37
+        and #$40
+        jml $04ABDA
+    .jammed
+        jml $04ABDC
 
 ;########################################################################################
 
@@ -565,7 +677,7 @@ byte_medal_contraints:
         rep #$20
         lda !energy_link_send_packet
         clc 
-        adc #$00C0
+        adc #$0060
         sta !energy_link_send_packet
         sep #$20
         jsr .handle
@@ -581,12 +693,12 @@ byte_medal_contraints:
     ..large
         lda !energy_link_send_packet
         clc 
-        adc #$0020
+        adc #$0010
         bra ..end
     ..small
         lda !energy_link_send_packet
         clc 
-        adc #$0008
+        adc #$0004
     ..end
         sta !energy_link_send_packet
         sep #$20
@@ -916,6 +1028,7 @@ byte_medal_contraints:
         rtl 
 
     listener_godkarmachine:
+        print pc
         jsl $32F2E9
         php 
         sep #$30
@@ -1017,10 +1130,13 @@ level_intro:
 ;##########################################################
 
 map:
+        lda !current_checkpoint
+        and #$7F
+        sta !current_checkpoint
+        jsl calculate_doppler_access
         jsr playback_sfx
         lda #$00
         sta !giving_item
-
         lda $1E59
         cmp #$04
         bne .return
@@ -1053,374 +1169,19 @@ map:
         rts 
 
 
-hack_portraits:
-        lda $00D1
-        beq .safety
-    ;# restore
-        lda #$AD
-        sta $7E2027
-        lda #$CE
-        sta $7E2028
-        lda #$09
-        sta $7E2029
-        lda #$0D 
-        sta $7E202A
-        lda #$D0
-        sta $7E202B
-        lda #$09
-        sta $7E202C
-    
-        lda $09CE
-        ora $09D0
-        rtl 
-
-    .safety
-        php 
-        phb 
-        phk 
-        plb 
-        sep #$30
-        lda $09CB
-        and #$0F
-        asl 
-        tax 
-        lda.l .offsets,x
-        bne +
-        jmp ..skip
-    +   
-        lda !unlocked_levels_array,x
-        beq ..locked
-    ..unlocked
-        phx 
-        lda.l .completed_indexes,x
-        tax 
-        lda.l !levels_completed_array,x
-        plx 
-        ora !unlocked_levels_array,x
-        cmp !map_portraits_array,x
-        beq ..skip
-        sta !map_portraits_array,x
-        ldy #$80
-        sty $2115
-        cmp #$00
-        rep #$20
-        phx 
-        lda.l .completed_indexes,x
-        tax 
-        lda.l !levels_completed_array,x
-        plx 
-        and #$0040
-        bne ..beaten
-    ..pending
-        lda.l .portrait_ptrs,x
-        bra ..shared
-    ..beaten
-        lda.l .completed_portrait_ptrs,x
-        bra ..shared
-    ..locked
-        cmp !map_portraits_array,x
-        beq ..skip
-        sta !map_portraits_array,x
-        rep #$20
-        lda.w #.blank_portrait
-    ..shared 
-        pha 
-        phx
-        lda.l .offsets,x
-        pha 
-        sta $2116
-        ldx #$00
-        ldy #$00
-    ...loop
-        lda ($04,s),y
-        sta $2118
-        iny #2
-        inx 
-        cpx #$06
-        bne ...loop
-        cpy #$3B
-        bcs ...break
-        ldx #$00
-        lda $01,s
-        clc 
-        adc #$0020
-        sta $01,s
-        sta $2116
-        bra ...loop
-    ...break
-        pla 
-        plx 
-        pla 
-        sep #$20
-    ..skip
-        plb 
-        plp 
-        lda $09CE
-        ora $09D0
-        rtl 
-
-    .offsets
-        dw $5841    ;# Blast hornet
-        dw $5847    ;# Blizzard Buffalo
-        dw $FFFF    ;# Blank
-        dw $5853    ;# Gravity Beetle
-        dw $5859    ;# Toxic Seahorse
-        dw $5AA1    ;# Volt Catfish
-        dw $5AA7    ;# Crush Crawfish
-        dw $FFFF    ;# Blank
-        dw $5AB3    ;# Tunnel Rhino
-        dw $5AB9    ;# Neon Tiger
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-
-    .completed_indexes
-        dw $0002
-        dw $000C
-        dw $FFFF
-        dw $000A
-        dw $0000
-        dw $0004
-        dw $0006
-        dw $FFFF
-        dw $000E
-        dw $0008
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-        dw $FFFF    ;# Blank
-
-    .portrait_ptrs
-        dw .blast_hornet_portrait
-        dw .blizzard_buffalo_portrait
-        dw $FFFF
-        dw .gravity_beetle_portrait
-        dw .toxic_seahorse_portrait
-        dw .volt_catfish_portrait
-        dw .crush_crawfish_portrait
-        dw $FFFF
-        dw .tunnel_rhino_portrait
-        dw .neon_tiger_portrait
-
-    .completed_portrait_ptrs
-        dw .blast_hornet_completed_portrait
-        dw .blizzard_buffalo_completed_portrait
-        dw $FFFF
-        dw .gravity_beetle_completed_portrait
-        dw .toxic_seahorse_completed_portrait
-        dw .volt_catfish_completed_portrait
-        dw .crush_crawfish_completed_portrait
-        dw $FFFF
-        dw .tunnel_rhino_completed_portrait
-        dw .neon_tiger_completed_portrait
-
-    .blank_portrait
-        ..row_1
-            dw $140F,$140F,$140F,$140F,$140F,$140F
-        ..row_2
-            dw $140F,$140F,$140F,$140F,$140F,$140F
-        ..row_3
-            dw $140F,$140F,$140F,$140F,$140F,$140F
-        ..row_4
-            dw $140F,$140F,$140F,$140F,$140F,$140F
-        ..row_5
-            dw $140F,$140F,$140F,$140F,$140F,$140F
-
-    .blast_hornet_portrait
-        ..row_1
-            dw $1415,$1416,$1417,$1418,$1419,$141A
-        ..row_2
-            dw $1424,$1425,$1426,$1427,$1428,$1429
-        ..row_3
-            dw $1434,$1435,$1436,$1437,$1438,$1439
-        ..row_4
-            dw $1444,$1445,$1446,$1447,$1448,$1449
-        ..row_5
-            dw $1453,$1454,$1455,$1456,$1457,$1458
-    .blizzard_buffalo_portrait
-        ..row_1
-            dw $1C0F,$1C1B,$1C1C,$1C1D,$1C1E,$1C1F
-        ..row_2
-            dw $1C2A,$1C2B,$1C2C,$1C2D,$1C2E,$1C2F
-        ..row_3
-            dw $1C3A,$1C3B,$1C3C,$1C3D,$1C3E,$1C3F
-        ..row_4
-            dw $1C4A,$1C4B,$1C4C,$1C4D,$1C4E,$1C4F
-        ..row_5
-            dw $1C59,$1C5A,$1C5B,$1C5C,$1C5D,$1C5E
-    .gravity_beetle_portrait
-        ..row_1
-            dw $14E8,$14E9,$14EA,$14EB,$14EC,$14ED
-        ..row_2
-            dw $14F6,$14F7,$14F8,$14F9,$14FA,$14FB
-        ..row_3
-            dw $1504,$1505,$1506,$1507,$1508,$1509
-        ..row_4
-            dw $1512,$1513,$1514,$1515,$1516,$1517
-        ..row_5
-            dw $1521,$1522,$1523,$1524,$1525,$140F
-    .toxic_seahorse_portrait
-        ..row_1
-            dw $18EE,$18EF,$18F0,$18F1,$18F2,$18F3
-        ..row_2
-            dw $18FC,$18FD,$18FE,$18FF,$1900,$1901
-        ..row_3
-            dw $190A,$190B,$190C,$190D,$190E,$190F
-        ..row_4
-            dw $1918,$1919,$191A,$191B,$191C,$191D
-        ..row_5
-            dw $1926,$1927,$1928,$1929,$192A,$192B
-    .volt_catfish_portrait
-        ..row_1
-            dw $15E8,$15E9,$15EA,$15EB,$15EC,$15ED
-        ..row_2
-            dw $15F7,$15F8,$15F9,$15FA,$15FB,$15FC
-        ..row_3
-            dw $1606,$1607,$1608,$1609,$160A,$160B
-        ..row_4
-            dw $1615,$1616,$1617,$1618,$1619,$161A
-        ..row_5
-            dw $1624,$1625,$1626,$1627,$1628,$1629
-    .crush_crawfish_portrait
-        ..row_1
-            dw $1DEE,$1DEF,$1DF0,$1DF1,$1DF2,$1DF3
-        ..row_2
-            dw $1DFD,$1DFE,$1DFF,$1E00,$1E01,$1E02
-        ..row_3
-            dw $1E0C,$1E0D,$1E0E,$1E0F,$1E10,$1E11
-        ..row_4
-            dw $1E1B,$1E1C,$1E1D,$1E1E,$1E1F,$1E20
-        ..row_5
-            dw $1E2A,$1E2B,$1E2C,$1E2D,$1E2E,$1E2F
-    .tunnel_rhino_portrait
-        ..row_1
-            dw $1A9F,$1AA0,$1AA1,$1AA2,$1AA3,$1AA4
-        ..row_2
-            dw $1AAE,$1AAF,$1AB0,$1AB1,$1AB2,$1AB3
-        ..row_3
-            dw $1ABD,$1ABE,$1ABF,$1AC0,$1AC1,$1AC2
-        ..row_4
-            dw $1ACA,$1ACB,$1ACC,$1ACD,$1ACE,$1ACF
-        ..row_5
-            dw $1AD7,$1AD8,$1AD9,$1ADA,$1ADB,$1ADC
-    .neon_tiger_portrait
-        ..row_1
-            dw $1EA5,$1EA6,$1EA7,$1EA8,$1EA9,$1EAA
-        ..row_2
-            dw $1EB4,$1EB5,$1EB6,$1EB7,$1EB8,$1EB9
-        ..row_3
-            dw $1EC3,$1EC4,$1EC5,$1EC6,$1EC7,$1EC8
-        ..row_4
-            dw $1ED0,$1ED1,$1ED2,$1ED3,$1ED4,$1ED5
-        ..row_5
-            dw $1EDD,$1EDE,$1EDF,$1EE0,$1EE1,$1EE2
-
-    .blast_hornet_completed_portrait
-        ..row_1
-            dw $0415,$0416,$0417,$0418,$0419,$041A
-        ..row_2
-            dw $0424,$0425,$0426,$0427,$0428,$0429
-        ..row_3
-            dw $0434,$0435,$0436,$0437,$0438,$0439
-        ..row_4
-            dw $0444,$0445,$0446,$0447,$0448,$0449
-        ..row_5
-            dw $0453,$0454,$0455,$0456,$0457,$0458
-    .blizzard_buffalo_completed_portrait
-        ..row_1
-            dw $040F,$041B,$041C,$041D,$041E,$041F
-        ..row_2
-            dw $042A,$042B,$042C,$042D,$042E,$042F
-        ..row_3
-            dw $043A,$043B,$043C,$043D,$043E,$043F
-        ..row_4
-            dw $044A,$044B,$044C,$044D,$044E,$044F
-        ..row_5
-            dw $0459,$045A,$045B,$045C,$045D,$045E
-    .gravity_beetle_completed_portrait
-        ..row_1
-            dw $04E8,$04E9,$04EA,$04EB,$04EC,$04ED
-        ..row_2
-            dw $04F6,$04F7,$04F8,$04F9,$04FA,$04FB
-        ..row_3
-            dw $0504,$0505,$0506,$0507,$0508,$0509
-        ..row_4
-            dw $0512,$0513,$0514,$0515,$0516,$0517
-        ..row_5
-            dw $0521,$0522,$0523,$0524,$0525,$040F
-    .toxic_seahorse_completed_portrait
-        ..row_1
-            dw $04EE,$04EF,$04F0,$04F1,$04F2,$04F3
-        ..row_2
-            dw $04FC,$04FD,$04FE,$04FF,$0500,$0501
-        ..row_3
-            dw $050A,$050B,$050C,$050D,$050E,$050F
-        ..row_4
-            dw $0518,$0519,$051A,$051B,$051C,$051D
-        ..row_5
-            dw $0526,$0527,$0528,$0529,$052A,$052B
-    .volt_catfish_completed_portrait
-        ..row_1
-            dw $05E8,$05E9,$05EA,$05EB,$05EC,$05ED
-        ..row_2
-            dw $05F7,$05F8,$05F9,$05FA,$05FB,$05FC
-        ..row_3
-            dw $0606,$0607,$0608,$0609,$060A,$060B
-        ..row_4
-            dw $0615,$0616,$0617,$0618,$0619,$061A
-        ..row_5
-            dw $0624,$0625,$0626,$0627,$0628,$0629
-    .crush_crawfish_completed_portrait
-        ..row_1
-            dw $05EE,$05EF,$05F0,$05F1,$05F2,$05F3
-        ..row_2
-            dw $05FD,$05FE,$05FF,$0600,$0601,$0602
-        ..row_3
-            dw $060C,$060D,$060E,$060F,$0610,$0611
-        ..row_4
-            dw $061B,$061C,$061D,$061E,$061F,$0620
-        ..row_5
-            dw $062A,$062B,$062C,$062D,$062E,$062F
-    .tunnel_rhino_completed_portrait
-        ..row_1
-            dw $069F,$06A0,$06A1,$06A2,$06A3,$06A4
-        ..row_2
-            dw $06AE,$06AF,$06B0,$06B1,$06B2,$06B3
-        ..row_3
-            dw $06BD,$06BE,$06BF,$06C0,$06C1,$06C2
-        ..row_4
-            dw $06CA,$06CB,$06CC,$06CD,$06CE,$06CF
-        ..row_5
-            dw $06D7,$06D8,$06D9,$06DA,$06DB,$06DC
-    .neon_tiger_completed_portrait
-        ..row_1
-            dw $06A5,$06A6,$06A7,$06A8,$06A9,$06AA
-        ..row_2
-            dw $06B4,$06B5,$06B6,$06B7,$06B8,$06B9
-        ..row_3
-            dw $06C3,$06C4,$06C5,$06C6,$06C7,$06C8
-        ..row_4
-            dw $06D0,$06D1,$06D2,$06D3,$06D4,$06D5
-        ..row_5
-            dw $06DD,$06DE,$06DF,$06E0,$06E1,$06E2
-
 
 ;##########################################################
 
 level:
-        jsr unlock_doppler_vile
+        jsr unlock_doppler
+        jsr unlock_vile
         jsr boss_rematch
         jsr handle_heart_tank_upgrade
         jsr handle_hp_refill
+        jsr handle_weapon_refill
         jsr give_1up
         jsr fix_softlock
         jsr playback_sfx
-        jsr infinite_hp
         rts 
 
 ;##########################################################
@@ -1428,6 +1189,7 @@ level:
 fix_softlock:
         lda !hp_tank_state
         ora !hp_refill_state
+        ora !weapon_refill_state
         ora !give_1up
         bne .nope
         lda #$00
@@ -1459,195 +1221,131 @@ boss_rematch:
 
 ;##########################################################
 
-infinite_hp:
-        lda.l debug_infinite_hp
-        beq .nope 
-        lda $09FF
-        cmp #$07
-        bcs .nope
-        lda $1FD2
-        sta $09FF
-    .nope
-        rts
+unlock_doppler:
+        lda.l doppler_configuration
+        bne .check_medals
+        rts 
 
-;##########################################################
-
-unlock_doppler_vile:
+    .check_medals
         phb 
         pea $7E7E
         plb 
         plb 
+        lda #$00
+        pha 
         lda.l doppler_configuration
-        asl 
-        tax 
-        jsr (.doppler_ptrs,x)
-        lda.l vile_configuration
-        asl 
-        tax 
-        jsr (.vile_ptrs,x)
-        plb 
-        rts 
-
-    .doppler_ptrs
-        dw ..multiworld
-        dw ..require_medals
-        dw ..require_weapons
-        dw ..require_armor_upgrades
-        dw ..require_heart_tanks
-        dw ..require_sub_tanks
-
-    ..multiworld
-        rts
-    ..require_medals
-        lda #$00
-        ldx #$0E
-    ...loop
-        bit.w !levels_completed_array,x
-        bvc $01
+        and #$01
+        beq ..force
+        jsr .count_medals
+        beq ..skip
+    ..force
+        lda $01,s
         inc 
-        dex #2
-        bpl ...loop
-        cmp.l doppler_medal_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
-
-    ..require_weapons
-        lda #$00
-        ldx #$0E
-    ...loop
-        bit.w !weapon_array,x
-        bvc $01
-        inc 
-        dex #2
-        bpl ...loop
-        cmp.l doppler_weapon_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
-
-    ..require_armor_upgrades
-        lda !ride_chip
-        and #$F0
-        pha 
-        lda !upgrades
-        and #$0F
-        ora $01,s
         sta $01,s
-        ldy #$00
-        ldx #$07
-    ...loop
+    ..skip
+
+    .check_weapons
+        lda.l doppler_configuration
+        and #$02
+        beq ..force
+        jsr .count_weapons
+        beq ..skip
+    ..force
         lda $01,s
-        and.l .bit_check,x
-        beq $01
-        iny 
-        dex 
-        bpl ...loop
-        pla 
-        tya 
-        cmp.l doppler_armor_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        inc 
+        sta $01,s
+    ..skip
 
-    ..require_heart_tanks
-        ldy #$00
-        ldx #$07
-    ...loop
-        lda.w !heart_tanks
-        and.l .bit_check,x
-        beq $01
-        iny 
-        dex 
-        bpl ...loop
-        tya 
-        cmp.l doppler_heart_tank_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
-
-    ..require_sub_tanks
-        lda !upgrades
-        and #$F0
-        pha 
-        ldy #$00
-        ldx #$07
-    ...loop
+    .check_armor_upgrades
+        lda.l doppler_configuration
+        and #$04
+        beq ..force
+        jsr .count_armor_upgrades
+        beq ..skip
+    ..force
         lda $01,s
-        and.l .bit_check,x
-        beq $01
-        iny 
-        dex 
-        bpl ...loop
-        pla 
-        tya 
-        cmp.l doppler_sub_tank_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        inc 
+        sta $01,s
+    ..skip
 
-    ..disable 
-        lda #$FF
-        sta !doppler_access
-        rts 
+    .check_heart_tanks
+        lda.l doppler_configuration
+        and #$08
+        beq ..force
+        jsr .count_heart_tanks
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+
+    .check_sub_tanks
+        lda.l doppler_configuration
+        and #$10
+        beq ..force
+        jsr .count_sub_tanks
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+    
+    .unlock_check
+        pla 
+        cmp #$05
+        bcc ..disable
     ..enable
+        plb 
         lda #$00
         sta !doppler_access
         lda #$01
         sta !unlocked_doppler_lab
+        rts 
+    ..disable
+        plb 
+        lda #$FF
+        sta !doppler_access
+        lda #$00
+        sta !unlocked_doppler_lab
         rts
 
-    .bit_check
-        db $01,$02,$04,$08,$10,$20,$40,$80
-
-;##########################################################
-
-    .vile_ptrs
-        dw ..multiworld
-        dw ..require_medals
-        dw ..require_weapons
-        dw ..require_armor_upgrades
-        dw ..require_heart_tanks
-        dw ..require_sub_tanks
-
-    ..multiworld
-        rts
-    ..require_medals
+.count_medals:
         lda #$00
         ldx #$0E
-    ...loop
+    ..loop
         bit.w !levels_completed_array,x
         bvc $01
         inc 
         dex #2
-        bpl ...loop
-        cmp.l vile_medal_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        bpl ..loop
+        cmp.l doppler_medal_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
 
-    ..require_weapons
+.count_weapons
         lda #$00
         ldx #$0E
-    ...loop
+    ..loop
         bit.w !weapon_array,x
         bvc $01
         inc 
         dex #2
-        bpl ...loop
-        cmp.l vile_weapon_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        bpl ..loop
+        cmp.l doppler_weapon_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
 
-    ..require_armor_upgrades
+.count_armor_upgrades
         lda !ride_chip
         and #$F0
         pha 
@@ -1657,67 +1355,272 @@ unlock_doppler_vile:
         sta $01,s
         ldy #$00
         ldx #$07
-    ...loop
+    ..loop
         lda $01,s
-        and.l .bit_check,x
+        and.l bit_check,x
         beq $01
         iny 
         dex 
-        bpl ...loop
+        bpl ..loop
         pla 
+        lda.l jammed_buster_configuration
+        beq +
+        lda !jammed_buster
+        beq +
+        iny 
+    +   
         tya 
-        cmp.l vile_armor_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        cmp.l doppler_armor_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
 
-    ..require_heart_tanks
+.count_heart_tanks
         ldy #$00
         ldx #$07
-    ...loop
+    ..loop
         lda.w !heart_tanks
-        and.l .bit_check,x
+        and.l bit_check,x
         beq $01
         iny 
         dex 
-        bpl ...loop
+        bpl ..loop
         tya 
-        cmp.l vile_heart_tank_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
+        cmp.l doppler_heart_tank_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
 
-    ..require_sub_tanks
+.count_sub_tanks
         lda !upgrades
         and #$F0
         pha 
         ldy #$00
         ldx #$07
-    ...loop
+    ..loop
         lda $01,s
-        and.l .bit_check,x
+        and.l bit_check,x
         beq $01
         iny 
         dex 
-        bpl ...loop
+        bpl ..loop
+        pla 
+        tya 
+        cmp.l doppler_sub_tank_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
+
+
+bit_check:
+        db $01,$02,$04,$08,$10,$20,$40,$80
+
+;##########################################################
+
+unlock_vile:
+        lda.l vile_configuration
+        bne .check_medals
+        rts 
+
+    .check_medals
+        phb 
+        pea $7E7E
+        plb 
+        plb 
+        lda #$00
+        pha 
+        lda.l vile_configuration
+        and #$01
+        beq ..force
+        jsr .count_medals
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+
+    .check_weapons
+        lda.l vile_configuration
+        and #$02
+        beq ..force
+        jsr .count_weapons
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+
+    .check_armor_upgrades
+        lda.l vile_configuration
+        and #$04
+        beq ..force
+        jsr .count_armor_upgrades
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+
+    .check_heart_tanks
+        lda.l vile_configuration
+        and #$08
+        beq ..force
+        jsr .count_heart_tanks
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+
+    .check_sub_tanks
+        lda.l vile_configuration
+        and #$10
+        beq ..force
+        jsr .count_sub_tanks
+        beq ..skip
+    ..force
+        lda $01,s
+        inc 
+        sta $01,s
+    ..skip
+    
+    .unlock_check
+        pla 
+        cmp #$05
+        bcc .disable
+    .enable
+        plb 
+        lda #$00
+        sta !vile_access
+        rts 
+    .disable
+        plb 
+        lda #$FF
+        sta !vile_access
+        rts
+
+.count_medals
+        lda #$00
+        ldx #$0E
+    ..loop
+        bit.w !levels_completed_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl ..loop
+        cmp.l vile_medal_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
+
+.count_weapons
+        lda #$00
+        ldx #$0E
+    ..loop
+        bit.w !weapon_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl ..loop
+        cmp.l vile_weapon_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
+
+.count_armor_upgrades
+        lda !ride_chip
+        and #$F0
+        pha 
+        lda !upgrades
+        and #$0F
+        ora $01,s
+        sta $01,s
+        ldy #$00
+        ldx #$07
+    ..loop
+        lda $01,s
+        and.l bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ..loop
+        pla 
+        lda.l jammed_buster_configuration
+        beq +
+        lda !jammed_buster
+        beq +
+        iny 
+    +   
+        tya 
+        cmp.l vile_armor_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
+
+.count_heart_tanks
+        ldy #$00
+        ldx #$07
+    ..loop
+        lda.w !heart_tanks
+        and.l bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ..loop
+        tya 
+        cmp.l vile_heart_tank_count
+        bcs ..enable
+        lda #$00
+        rts 
+    ..enable 
+        lda #$01
+        rts
+
+.count_sub_tanks
+        lda !upgrades
+        and #$F0
+        pha 
+        ldy #$00
+        ldx #$07
+    ..loop
+        lda $01,s
+        and.l bit_check,x
+        beq $01
+        iny 
+        dex 
+        bpl ..loop
         pla 
         tya 
         cmp.l vile_sub_tank_count
-        bcs ...enable
-        jmp ..disable
-    ...enable 
-        jmp ..enable
-
-    ..disable 
-        lda #$FF
-        sta !vile_access
-        rts 
-    ..enable
+        bcs ..enable
         lda #$00
-        sta !vile_access
+        rts 
+    ..enable 
+        lda #$01
         rts
+
 
 ;##########################################################
 
@@ -1736,7 +1639,7 @@ handle_heart_tank_upgrade:
         rts
     .init
         lda $1FD2
-        cmp #$20
+        cmp #$38
         bcc ..continue
         lda #$00
         sta !hp_tank_state
@@ -1767,7 +1670,7 @@ handle_heart_tank_upgrade:
         bne ..not_yet
         lda #$06
         sta !hp_tank_state
-        lda #$02
+        lda.l heart_tank_add
         sta !hp_tank_counter
         sta !hp_tank_timer_2
     ..not_yet
@@ -1785,11 +1688,11 @@ handle_heart_tank_upgrade:
         sta !hp_tank_timer_2
         lda $1FD2
         inc 
-        cmp #$20
+        cmp #$38
         bcc ..not_max
         lda #$08
         sta !hp_tank_state
-        lda #$20
+        lda #$38
     ..not_max
         sta $1FD2
         inc $09FF
@@ -1961,6 +1864,158 @@ handle_hp_refill:
         sta !hp_refill_state
     ..not_yet
         rts
+
+;##########################################################
+
+handle_weapon_refill:
+        lda !weapon_refill_state
+        tax 
+        jmp (.ptrs,x)
+    .ptrs
+        dw .waiting
+        dw .init
+        dw .increment_weapon
+        dw .end
+
+    .waiting
+        rts 
+    .init
+        ldy $0A0B
+        beq ..no_weapon
+        cpy #$12
+        bcs ..no_weapon
+        bra ..valid_weapon
+    ..no_weapon
+        jsr .refill_other_weapons
+        lda #$06
+        sta !weapon_refill_state
+        rts 
+    ..valid_weapon
+        lda !weapon_array-$02,y
+        and #$3F
+        cmp #$1C
+        beq ..no_weapon
+        lda #$01
+        sta $1F25
+        sta $1F26
+        sta $1F27
+        sta $1F28
+        sta $1F29
+        sta $1F2A
+        sta $1F2B
+        sta $09E6
+        lda #$7F
+        sta $1F4F
+        lda #$04
+        sta !weapon_refill_state
+        lda #$04
+        sta !weapon_refill_timer
+        jsl $04D0E8
+        rts 
+
+    .increment_weapon
+        lda $09FF
+        and #$7F
+        beq ..not_frozen
+        lda !weapon_refill_timer
+        dec 
+        sta !weapon_refill_timer
+        bne ..not_yet
+        lda #$04 
+        sta !weapon_refill_timer
+        ldy $0A0B
+        rep #$21
+        lda !weapon_array-$03,y
+        and #$3FFF
+        adc #$0100
+        cmp #$1C00
+        bcc ..not_max
+        lda !weapon_refill_amount
+        and #$00FF
+        dec 
+        beq ..done
+        sta !weapon_refill_amount
+        jsr .refill_other_weapons
+    ..done
+        sep #$20
+        lda #$06
+        sta !weapon_refill_state
+        rep #$20
+        lda #$1C00
+    ..not_max
+        ora #$C000
+        sta !weapon_array-$03,y
+        sep #$20
+        lda #$15
+        jsl $01802B
+        lda !weapon_refill_amount
+        dec 
+        sta !weapon_refill_amount
+        bne ..not_yet
+    ..not_frozen
+        lda #$06
+        sta !weapon_refill_state
+    ..not_yet
+        rts 
+
+    .end
+        stz $1F25
+        stz $1F26
+        stz $1F27
+        stz $1F28
+        stz $1F29
+        stz $1F2A
+        stz $1F2B
+        stz $1F4F
+        lda #$00
+        sta !weapon_refill_state
+        sta !giving_item
+        jsl $04D130
+        rts 
+
+    .refill_other_weapons
+        php 
+        rep #$20
+        stz $0002
+        lda !weapon_refill_amount
+        and #$00FF
+        xba 
+        sta $0000
+        ldx #$02
+    ..loop
+        lda !weapon_array-$03,x
+        bit #$4000
+        beq ..next
+        and #$3FFF
+        cmp #$1C00
+        bcs ..next
+        adc $0000
+        cmp #$1C00
+        bcc ..refill_next
+        sbc #$1C00
+        sta $0000
+        beq ..full
+        inc $0002
+    ..full
+        lda #$1C00
+    ..finish_weapon
+        ora #$C000
+        sta !weapon_array-$03,x
+        lda #$0016 
+        jsl $01802B
+        lda $0002
+        beq ..end
+    ..next
+        inx #2
+        cpx #$12
+        bne ..loop
+    ..end 
+        plp 
+        rts 
+    ..refill_next
+        stz $0002
+        bra ..finish_weapon
+
 
 ;##########################################################
 
@@ -2351,6 +2406,13 @@ make_player_not_get_stuck_after_shooting_a_pink_or_red_charge:
         bit #$80
         rts 
 
+reroute_dmg_table:
+.1  
+    clc
+.2  
+    jsl damage_routine
+    rts 
+
 
 org $07FFD8
     check_vile_boss_count_bank_07:
@@ -2419,3 +2481,1044 @@ org $02FF73
         rts 
 
 incsrc "text.asm"
+
+;################################################
+
+org $138000
+    weakness_table:
+        skip ($8*23)
+
+pushpc
+    org $04CF0E
+        jsr reroute_dmg_table_1
+    org $04CF3D
+        jsr reroute_dmg_table_2
+    org $04CF7E
+        jsr reroute_dmg_table_1
+
+pullpc
+
+print pc
+damage_routine:
+        php 
+        lda #$00
+        xba 
+        lda.l boss_weakness_rando
+        bne .custom
+    .original
+        plp 
+        bcs ..sub
+    ..load
+        lda.w $E4A5,y
+        rtl 
+    ..sub
+        lda $27
+        and #$7F
+        sec 
+        sbc.w $E4A5,y
+        rtl
+
+    .custom
+        lda $28
+        cmp #$14
+        beq ..reroute_godkarmachine
+        cmp #$18
+        bne +
+        jmp ..reroute_shurikein
+    +   
+        cmp #$1A
+        bne +
+        jmp ..reroute_hootareca_volt_kurageil
+    +   
+        cmp #$1B
+        bne +
+        jmp ..reroute_hell_crusher_press_disposer
+    +   
+        bra .original
+        ; $0A = Sprite ID
+
+    ..reroute_godkarmachine
+        lda $0A
+        cmp.b #93
+        beq ..godkarmachine
+        jmp .original
+    ..godkarmachine
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_godkarmachine,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_godkarmachine,x
+        plx 
+        cmp #$00
+        rtl 
+
+    ..reroute_shurikein
+        lda $0A
+        cmp.b #79
+        beq ..shurikein
+        jmp .original
+    ..shurikein
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_shurikein,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_shurikein,x
+        plx 
+        cmp #$00
+        rtl 
+
+    ..reroute_hootareca_volt_kurageil
+        lda $0A
+        cmp.b #66
+        beq ..hootareca
+        cmp.b #74
+        beq ..volt_kurageil
+        jmp .original
+    ..hootareca
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_hootareca,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_hootareca,x
+        plx 
+        cmp #$00
+        rtl 
+    ..volt_kurageil
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_volt_kurageil,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_volt_kurageil,x
+        plx 
+        cmp #$00
+        rtl 
+
+    ..reroute_hell_crusher_press_disposer
+        lda $0A
+        cmp.b #48
+        beq ..hell_crusher
+        cmp.b #90
+        beq ..press_disposer
+        jmp .original
+    ..hell_crusher
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_hell_crusher,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_hell_crusher,x
+        plx 
+        cmp #$00
+        rtl 
+    ..press_disposer
+        plp 
+        bcs ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda.l damage_table_press_disposer,x
+        plx 
+        cmp #$00
+        rtl 
+    ...sub
+        phx 
+        lda $1F2F
+        tax 
+        lda $27
+        and #$7F
+        sec 
+        sbc.l damage_table_press_disposer,x
+        plx 
+        cmp #$00
+        rtl 
+
+
+pushpc
+    org $06FF00
+        damage_table:
+            .godkarmachine
+                skip $28
+            .shurikein
+                skip $28
+            .hootareca
+                skip $28
+            .volt_kurageil
+                skip $28
+            .hell_crusher
+                skip $28
+            .press_disposer
+                skip $28
+            
+pullpc
+
+;################################################
+
+pushpc
+    org $04DBBA
+        lda.l starting_hp
+        jml load_max_hp_2
+
+pullpc
+
+load_max_hp_2:
+    .loop
+        dec $0000
+        bmi .break
+        clc 
+        adc.l heart_tank_add
+        bra .loop
+    .break
+        cmp #$38
+        bcc +
+        lda #$38
+    +   
+        sta $1FD2
+        jml $04DBC4
+
+
+draw_stage_select:
+    .game
+        pha 
+        sta !current_map_selection
+
+        jsl count_total_medals
+
+        lda !current_map_selection
+        cmp #$0A
+        bcs ..nope
+        asl 
+        tax 
+        jsr (..ptrs,x)
+    ..nope
+        pla 
+        rtl 
+
+    ..ptrs
+        dw ..blast_hornet
+        dw ..blizzard_buffalo
+        dw ..x_sign
+        dw ..gravity_beetle
+        dw ..toxic_seahorse
+        dw ..volt_catfish
+        dw ..crush_crawfish
+        dw ..doppler
+        dw ..tunnel_rhino
+        dw ..neon_tiger
+        
+    ..x_sign
+        jsr ..clear_tilemaps
+        rts 
+
+    ..clear_tilemaps
+        ldx #$00
+        rep #$20
+        lda #$207F
+    ...loop
+        sta !top_text_tilemap,x
+        sta !bottom_text_tilemap,x
+        inx #2
+        cpx #$40
+        bne ...loop
+        sep #$20
+        rts 
+
+    ..blast_hornet
+    ..blizzard_buffalo
+    ..gravity_beetle
+    ..toxic_seahorse
+    ..volt_catfish
+    ..crush_crawfish
+    ..tunnel_rhino
+    ..neon_tiger
+        lda !upgrades
+        and #$01
+        beq ...no_fix
+        lda $00AC
+        and #$30
+        beq ...no_change_checkpoint
+        lda !current_checkpoint
+        and #$7F
+        inc 
+        sta !current_checkpoint
+        lda #$1C
+        jsl $01802B
+    ...no_change_checkpoint
+        lda !current_checkpoint
+        cmp #$03
+        bcc ...no_fix
+        lda #$00
+        sta !current_checkpoint
+    ...no_fix
+
+        jsr ..clear_tilemaps
+        jsr ..process_checkpoints
+
+        lda !medal_count
+        cmp.l bit_medal_count
+        bcs ...bit_can_be_visited
+        rts 
+    ...bit_can_be_visited
+
+        lda $00AD
+        and #$20
+        beq ...no_change
+        lda #$1C
+        jsl $01802B
+        lda !bit_byte_selector
+        inc
+        sta !bit_byte_selector
+    ...no_change
+
+        phb 
+        phk 
+        plb 
+        rep #$20
+        ldy #$00
+        ldx #$16
+    ...loop_text
+        lda.w ...text,y
+        cmp #$FFFF
+        beq ...done_text
+        sta !bottom_text_tilemap,x
+        inx #2
+        iny #2
+        bra ...loop_text
+    ...done_text
+    
+        lda !bit_byte_selector
+        and #$0001
+        asl 
+        tay 
+        lda.w ...progress,y
+        sta !bottom_text_tilemap,x
+        sep #$20
+        plb 
+        rts 
+
+    ...text
+        dw $2442,$2469,$2474
+        dw $242D
+        dw $2442,$2479,$2474,$2465
+        dw $247F
+        dw $FFFF
+
+    ...progress
+        dw $2059,$204E
+
+
+    ..doppler
+        lda !upgrades
+        and #$01
+        bne +
+        jmp ...no_fix
+    +   
+        lda $00AC
+        and #$30
+        beq ...no_change_checkpoint
+        lda #$1C
+        jsl $01802B
+        lda !current_checkpoint
+        and #$7F
+        inc 
+        sta !current_checkpoint
+    ...no_change_checkpoint
+        lda $1FAF
+        cmp #$03
+        beq ...force
+        cmp #$00
+        bne ...regular
+        lda !current_checkpoint
+        cmp #$04
+        bcc ...no_fix
+        bra ...force
+    ...regular
+        lda !current_checkpoint
+        cmp #$03
+        bcc ...no_fix
+    ...force
+        lda #$00
+        sta !current_checkpoint
+    ...no_fix
+
+        lda $00AD
+        and #$20
+        beq ...no_change
+        lda #$1C
+        jsl $01802B
+        inc $1FAF
+        lda $1FAF
+        cmp !lab_backup
+        bcc ...no_change
+        stz $1FAF
+    ...no_change
+
+        jsr ..clear_tilemaps
+        jsr ..process_checkpoints
+        phb 
+        phk 
+        plb 
+        rep #$20
+        ldy #$00
+        ldx #$1C
+    ...loop_text
+        lda.w ...text,y
+        cmp #$FFFF
+        beq ...done_text
+        sta !bottom_text_tilemap,x
+        inx #2
+        iny #2
+        bra ...loop_text
+    ...done_text
+    
+        lda $1FAF
+        and #$00FF
+        asl 
+        tay 
+        lda.w ...progress,y
+        sta !bottom_text_tilemap,x
+        sep #$20
+        plb 
+        rts 
+
+    ...text
+        dw $244C,$2461,$2462
+        dw $FFFF
+
+    ...progress
+        dw $2031,$2032,$2033,$2034,$2035
+
+    ..process_checkpoints
+        lda !upgrades
+        and #$01
+        beq ...skip
+        phb 
+        phk 
+        plb 
+        rep #$20
+        ldy #$00
+        ldx #$14
+    ...loop_text
+        lda.w ...text,y
+        cmp #$FFFF
+        beq ...done_text
+        sta !top_text_tilemap,x
+        inx #2
+        iny #2
+        bra ...loop_text
+    ...done_text
+        inx #2
+        lda !current_checkpoint
+        and #$007F
+        asl 
+        tay 
+        lda.w ...progress,y
+        sta !top_text_tilemap,x
+        sep #$20
+        plb 
+    ...skip
+        rts 
+
+    ...text
+        dw $2443,$2468,$2465,$2463,$246B,$2470,$246F,$2469,$246E,$2474
+        dw $FFFF
+
+    ...progress
+        dw $2831,$2832,$2833,$2834,$2835,$2836,$2837,$2838
+        dw $2839,$283A,$283B,$283C,$283D,$283E,$283F,$2830
+
+;############################################
+
+    .nmi
+        lda !current_map_selection
+        cmp #$0A
+        bcs ..nope
+        asl 
+        tax 
+        jsr (..ptrs,x)
+        jsr ..texts
+    ..nope
+        rts 
+
+    ..texts
+        ldy #$80
+        sty $2115
+        rep #$20
+        lda #$1801
+        sta $4300
+        ldy #$7E
+        sty $4304
+
+        lda #$0920
+        sta $2116
+        lda.w #!top_text_tilemap
+        sta $4302
+        lda #$0040
+        sta $4305
+        ldy #$01
+        sty $420B
+
+        lda #$0A40
+        sta $2116
+        lda #$0040
+        sta $4305
+        ldy #$01
+        sty $420B
+
+        sep #$20
+        rts 
+
+    ..ptrs
+        dw ..blast_hornet
+        dw ..blizzard_buffalo
+        dw ..x_sign
+        dw ..gravity_beetle
+        dw ..toxic_seahorse
+        dw ..volt_catfish
+        dw ..crush_crawfish
+        dw ..doppler
+        dw ..tunnel_rhino
+        dw ..neon_tiger
+        
+    ..x_sign
+    ..blast_hornet
+    ..blizzard_buffalo
+    ..gravity_beetle
+    ..toxic_seahorse
+    ..volt_catfish
+    ..crush_crawfish
+    ..tunnel_rhino
+    ..neon_tiger
+        rts 
+
+
+
+
+    ..doppler
+        ldy #$80
+        sty $2115
+        rep #$20
+        lda #$0A40
+        sta $2116
+        lda #$244C
+        sta $2118
+        lda #$2461
+        sta $2118
+        lda #$2462
+        sta $2118
+        lda $1FAF
+        and #$00FF
+        asl 
+        tay 
+        lda.w ...progress,y
+        sta $2118
+        sep #$20
+        rts 
+
+    ...progress
+        dw $2031,$2032,$2033,$2034,$2035
+
+count_total_medals:
+        phx 
+        php 
+        sep #$30
+        phb 
+        lda #$7E
+        pha 
+        plb
+        lda #$00
+        ldx #$0E
+    .loop
+        bit.w !levels_completed_array,x
+        bvc $01
+        inc 
+        dex #2
+        bpl .loop
+        sta.w !medal_count
+        plb 
+        plp 
+        plx 
+        rtl
+
+;###############################################################
+
+hack_portraits:
+        lda $00D1
+        beq .safety
+    ;# restore
+        lda #$AD
+        sta $7E2027
+        lda #$CE
+        sta $7E2028
+        lda #$09
+        sta $7E2029
+        lda #$0D 
+        sta $7E202A
+        lda #$D0
+        sta $7E202B
+        lda #$09
+        sta $7E202C
+    
+        lda $09CE
+        ora $09D0
+        rtl 
+
+    .safety
+        php 
+        phb 
+        phk 
+        plb 
+        sep #$30
+        jsr draw_stage_select_nmi
+        lda $09CB
+        and #$0F
+        asl 
+        tax 
+        lda.l .offsets,x
+        bne +
+        jmp ..skip
+    +   
+        lda !unlocked_levels_array,x
+        beq ..locked
+    ..unlocked
+        phx 
+        lda.l .completed_indexes,x
+        tax 
+        lda.l !levels_completed_array,x
+        plx 
+        ora !unlocked_levels_array,x
+        cmp !map_portraits_array,x
+        beq ..skip
+        sta !map_portraits_array,x
+        ldy #$80
+        sty $2115
+        cmp #$00
+        rep #$20
+        phx 
+        lda.l .completed_indexes,x
+        tax 
+        lda.l !levels_completed_array,x
+        plx 
+        and #$0040
+        bne ..beaten
+    ..pending
+        lda.l .portrait_ptrs,x
+        bra ..shared
+    ..beaten
+        lda.l .completed_portrait_ptrs,x
+        bra ..shared
+    ..locked
+        cmp !map_portraits_array,x
+        beq ..skip
+        sta !map_portraits_array,x
+        rep #$20
+        lda.w #.blank_portrait
+    ..shared 
+        pha 
+        phx
+        lda.l .offsets,x
+        pha 
+        sta $2116
+        ldx #$00
+        ldy #$00
+    ...loop
+        lda ($04,s),y
+        sta $2118
+        iny #2
+        inx 
+        cpx #$06
+        bne ...loop
+        cpy #$3B
+        bcs ...break
+        ldx #$00
+        lda $01,s
+        clc 
+        adc #$0020
+        sta $01,s
+        sta $2116
+        bra ...loop
+    ...break
+        pla 
+        plx 
+        pla 
+        sep #$20
+    ..skip
+        plb 
+        plp 
+        lda $09CE
+        ora $09D0
+        rtl 
+
+    .offsets
+        dw $5841    ;# Blast hornet
+        dw $5847    ;# Blizzard Buffalo
+        dw $FFFF    ;# Blank
+        dw $5853    ;# Gravity Beetle
+        dw $5859    ;# Toxic Seahorse
+        dw $5AA1    ;# Volt Catfish
+        dw $5AA7    ;# Crush Crawfish
+        dw $FFFF    ;# Blank
+        dw $5AB3    ;# Tunnel Rhino
+        dw $5AB9    ;# Neon Tiger
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+
+    .completed_indexes
+        dw $0002
+        dw $000C
+        dw $FFFF
+        dw $000A
+        dw $0000
+        dw $0004
+        dw $0006
+        dw $FFFF
+        dw $000E
+        dw $0008
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+        dw $FFFF    ;# Blank
+
+    .portrait_ptrs
+        dw .blast_hornet_portrait
+        dw .blizzard_buffalo_portrait
+        dw $FFFF
+        dw .gravity_beetle_portrait
+        dw .toxic_seahorse_portrait
+        dw .volt_catfish_portrait
+        dw .crush_crawfish_portrait
+        dw $FFFF
+        dw .tunnel_rhino_portrait
+        dw .neon_tiger_portrait
+
+    .completed_portrait_ptrs
+        dw .blast_hornet_completed_portrait
+        dw .blizzard_buffalo_completed_portrait
+        dw $FFFF
+        dw .gravity_beetle_completed_portrait
+        dw .toxic_seahorse_completed_portrait
+        dw .volt_catfish_completed_portrait
+        dw .crush_crawfish_completed_portrait
+        dw $FFFF
+        dw .tunnel_rhino_completed_portrait
+        dw .neon_tiger_completed_portrait
+
+    .blank_portrait
+        ..row_1
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_2
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_3
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_4
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+        ..row_5
+            dw $140F,$140F,$140F,$140F,$140F,$140F
+
+    .blast_hornet_portrait
+        ..row_1
+            dw $1415,$1416,$1417,$1418,$1419,$141A
+        ..row_2
+            dw $1424,$1425,$1426,$1427,$1428,$1429
+        ..row_3
+            dw $1434,$1435,$1436,$1437,$1438,$1439
+        ..row_4
+            dw $1444,$1445,$1446,$1447,$1448,$1449
+        ..row_5
+            dw $1453,$1454,$1455,$1456,$1457,$1458
+    .blizzard_buffalo_portrait
+        ..row_1
+            dw $1C0F,$1C1B,$1C1C,$1C1D,$1C1E,$1C1F
+        ..row_2
+            dw $1C2A,$1C2B,$1C2C,$1C2D,$1C2E,$1C2F
+        ..row_3
+            dw $1C3A,$1C3B,$1C3C,$1C3D,$1C3E,$1C3F
+        ..row_4
+            dw $1C4A,$1C4B,$1C4C,$1C4D,$1C4E,$1C4F
+        ..row_5
+            dw $1C59,$1C5A,$1C5B,$1C5C,$1C5D,$1C5E
+    .gravity_beetle_portrait
+        ..row_1
+            dw $14E8,$14E9,$14EA,$14EB,$14EC,$14ED
+        ..row_2
+            dw $14F6,$14F7,$14F8,$14F9,$14FA,$14FB
+        ..row_3
+            dw $1504,$1505,$1506,$1507,$1508,$1509
+        ..row_4
+            dw $1512,$1513,$1514,$1515,$1516,$1517
+        ..row_5
+            dw $1521,$1522,$1523,$1524,$1525,$140F
+    .toxic_seahorse_portrait
+        ..row_1
+            dw $18EE,$18EF,$18F0,$18F1,$18F2,$18F3
+        ..row_2
+            dw $18FC,$18FD,$18FE,$18FF,$1900,$1901
+        ..row_3
+            dw $190A,$190B,$190C,$190D,$190E,$190F
+        ..row_4
+            dw $1918,$1919,$191A,$191B,$191C,$191D
+        ..row_5
+            dw $1926,$1927,$1928,$1929,$192A,$192B
+    .volt_catfish_portrait
+        ..row_1
+            dw $15E8,$15E9,$15EA,$15EB,$15EC,$15ED
+        ..row_2
+            dw $15F7,$15F8,$15F9,$15FA,$15FB,$15FC
+        ..row_3
+            dw $1606,$1607,$1608,$1609,$160A,$160B
+        ..row_4
+            dw $1615,$1616,$1617,$1618,$1619,$161A
+        ..row_5
+            dw $1624,$1625,$1626,$1627,$1628,$1629
+    .crush_crawfish_portrait
+        ..row_1
+            dw $1DEE,$1DEF,$1DF0,$1DF1,$1DF2,$1DF3
+        ..row_2
+            dw $1DFD,$1DFE,$1DFF,$1E00,$1E01,$1E02
+        ..row_3
+            dw $1E0C,$1E0D,$1E0E,$1E0F,$1E10,$1E11
+        ..row_4
+            dw $1E1B,$1E1C,$1E1D,$1E1E,$1E1F,$1E20
+        ..row_5
+            dw $1E2A,$1E2B,$1E2C,$1E2D,$1E2E,$1E2F
+    .tunnel_rhino_portrait
+        ..row_1
+            dw $1A9F,$1AA0,$1AA1,$1AA2,$1AA3,$1AA4
+        ..row_2
+            dw $1AAE,$1AAF,$1AB0,$1AB1,$1AB2,$1AB3
+        ..row_3
+            dw $1ABD,$1ABE,$1ABF,$1AC0,$1AC1,$1AC2
+        ..row_4
+            dw $1ACA,$1ACB,$1ACC,$1ACD,$1ACE,$1ACF
+        ..row_5
+            dw $1AD7,$1AD8,$1AD9,$1ADA,$1ADB,$1ADC
+    .neon_tiger_portrait
+        ..row_1
+            dw $1EA5,$1EA6,$1EA7,$1EA8,$1EA9,$1EAA
+        ..row_2
+            dw $1EB4,$1EB5,$1EB6,$1EB7,$1EB8,$1EB9
+        ..row_3
+            dw $1EC3,$1EC4,$1EC5,$1EC6,$1EC7,$1EC8
+        ..row_4
+            dw $1ED0,$1ED1,$1ED2,$1ED3,$1ED4,$1ED5
+        ..row_5
+            dw $1EDD,$1EDE,$1EDF,$1EE0,$1EE1,$1EE2
+
+    .blast_hornet_completed_portrait
+        ..row_1
+            dw $0415,$0416,$0417,$0418,$0419,$041A
+        ..row_2
+            dw $0424,$0425,$0426,$0427,$0428,$0429
+        ..row_3
+            dw $0434,$0435,$0436,$0437,$0438,$0439
+        ..row_4
+            dw $0444,$0445,$0446,$0447,$0448,$0449
+        ..row_5
+            dw $0453,$0454,$0455,$0456,$0457,$0458
+    .blizzard_buffalo_completed_portrait
+        ..row_1
+            dw $040F,$041B,$041C,$041D,$041E,$041F
+        ..row_2
+            dw $042A,$042B,$042C,$042D,$042E,$042F
+        ..row_3
+            dw $043A,$043B,$043C,$043D,$043E,$043F
+        ..row_4
+            dw $044A,$044B,$044C,$044D,$044E,$044F
+        ..row_5
+            dw $0459,$045A,$045B,$045C,$045D,$045E
+    .gravity_beetle_completed_portrait
+        ..row_1
+            dw $04E8,$04E9,$04EA,$04EB,$04EC,$04ED
+        ..row_2
+            dw $04F6,$04F7,$04F8,$04F9,$04FA,$04FB
+        ..row_3
+            dw $0504,$0505,$0506,$0507,$0508,$0509
+        ..row_4
+            dw $0512,$0513,$0514,$0515,$0516,$0517
+        ..row_5
+            dw $0521,$0522,$0523,$0524,$0525,$040F
+    .toxic_seahorse_completed_portrait
+        ..row_1
+            dw $04EE,$04EF,$04F0,$04F1,$04F2,$04F3
+        ..row_2
+            dw $04FC,$04FD,$04FE,$04FF,$0500,$0501
+        ..row_3
+            dw $050A,$050B,$050C,$050D,$050E,$050F
+        ..row_4
+            dw $0518,$0519,$051A,$051B,$051C,$051D
+        ..row_5
+            dw $0526,$0527,$0528,$0529,$052A,$052B
+    .volt_catfish_completed_portrait
+        ..row_1
+            dw $05E8,$05E9,$05EA,$05EB,$05EC,$05ED
+        ..row_2
+            dw $05F7,$05F8,$05F9,$05FA,$05FB,$05FC
+        ..row_3
+            dw $0606,$0607,$0608,$0609,$060A,$060B
+        ..row_4
+            dw $0615,$0616,$0617,$0618,$0619,$061A
+        ..row_5
+            dw $0624,$0625,$0626,$0627,$0628,$0629
+    .crush_crawfish_completed_portrait
+        ..row_1
+            dw $05EE,$05EF,$05F0,$05F1,$05F2,$05F3
+        ..row_2
+            dw $05FD,$05FE,$05FF,$0600,$0601,$0602
+        ..row_3
+            dw $060C,$060D,$060E,$060F,$0610,$0611
+        ..row_4
+            dw $061B,$061C,$061D,$061E,$061F,$0620
+        ..row_5
+            dw $062A,$062B,$062C,$062D,$062E,$062F
+    .tunnel_rhino_completed_portrait
+        ..row_1
+            dw $069F,$06A0,$06A1,$06A2,$06A3,$06A4
+        ..row_2
+            dw $06AE,$06AF,$06B0,$06B1,$06B2,$06B3
+        ..row_3
+            dw $06BD,$06BE,$06BF,$06C0,$06C1,$06C2
+        ..row_4
+            dw $06CA,$06CB,$06CC,$06CD,$06CE,$06CF
+        ..row_5
+            dw $06D7,$06D8,$06D9,$06DA,$06DB,$06DC
+    .neon_tiger_completed_portrait
+        ..row_1
+            dw $06A5,$06A6,$06A7,$06A8,$06A9,$06AA
+        ..row_2
+            dw $06B4,$06B5,$06B6,$06B7,$06B8,$06B9
+        ..row_3
+            dw $06C3,$06C4,$06C5,$06C6,$06C7,$06C8
+        ..row_4
+            dw $06D0,$06D1,$06D2,$06D3,$06D4,$06D5
+        ..row_5
+            dw $06DD,$06DE,$06DF,$06E0,$06E1,$06E2
+
+calculate_doppler_access:
+        lda !boss_clears+$12
+        beq +
+        lda !boss_clears+$10
+        beq + 
+        lda !boss_clears+$0E
+        beq +
+        lda #$04
+        sta !lab_backup
+        rtl 
+    +
+        lda $1FAF
+        cmp #$03
+        bcc +
+        lda #$02
+        sta $1FAF
+    +   
+        lda.l doppler_all_labs
+        beq +
+        lda #$03
+        sta !lab_backup
+        rtl 
+    +   
+
+        lda !boss_clears+$10
+        beq +
+        lda !boss_clears+$0E
+        beq +
+        lda #$03
+        sta !lab_backup
+        rtl 
+    +
+        lda !boss_clears+$0E
+        beq +
+        lda #$02
+        sta !lab_backup
+    +   
+        rtl 
+
+pushpc
+    org $00E601
+        jsl load_different_checkpoint
+        nop #1
+pullpc
+
+load_different_checkpoint:
+        lda $00D0
+        beq .use_original_ram
+        lda !upgrades
+        and #$01
+        beq .use_original_ram
+        lda !current_checkpoint
+        bmi .already_loaded
+        sta $1FB5
+        lda #$80
+        sta !current_checkpoint
+    .already_loaded
+    .use_original_ram
+        rep #$20
+        lda $1FB5
+        rtl 
+
+
+print pc
+warnpc $13C000
